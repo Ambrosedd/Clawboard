@@ -17,6 +17,11 @@
 	A00000000000000000000008 /* TaskDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000018 /* TaskDetailView.swift */; };
 	A00000000000000000000009 /* ApprovalCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000019 /* ApprovalCenterView.swift */; };
 	A0000000000000000000000A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000001A /* SettingsView.swift */; };
+	A0000000000000000000000B /* MockData.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000001B /* MockData.swift */; };
+	A0000000000000000000000C /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000001C /* AppViewModel.swift */; };
+	A0000000000000000000000D /* LobsterDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000001D /* LobsterDetailView.swift */; };
+	A0000000000000000000000E /* ApprovalDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000001E /* ApprovalDetailView.swift */; };
+	A00000000000000000000010 /* PairingFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000001F /* PairingFlowView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,6 +36,11 @@
 	A00000000000000000000018 /* TaskDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clawboard/Features/Tasks/TaskDetailView.swift; sourceTree = "<group>"; };
 	A00000000000000000000019 /* ApprovalCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clawboard/Features/Approvals/ApprovalCenterView.swift; sourceTree = "<group>"; };
 	A0000000000000000000001A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clawboard/Features/Settings/SettingsView.swift; sourceTree = "<group>"; };
+	A0000000000000000000001B /* MockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clawboard/Core/Networking/MockData.swift; sourceTree = "<group>"; };
+	A0000000000000000000001C /* AppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clawboard/Core/ViewModels/AppViewModel.swift; sourceTree = "<group>"; };
+	A0000000000000000000001D /* LobsterDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clawboard/Features/Lobsters/LobsterDetailView.swift; sourceTree = "<group>"; };
+	A0000000000000000000001E /* ApprovalDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clawboard/Features/Approvals/ApprovalDetailView.swift; sourceTree = "<group>"; };
+	A0000000000000000000001F /* PairingFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clawboard/Features/Settings/PairingFlowView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -59,12 +69,17 @@
 			A00000000000000000000012 /* RootTabView.swift */,
 			A00000000000000000000013 /* AppModels.swift */,
 			A00000000000000000000014 /* ConnectorClient.swift */,
+			A0000000000000000000001B /* MockData.swift */,
+			A0000000000000000000001C /* AppViewModel.swift */,
 			A00000000000000000000015 /* DashboardView.swift */,
 			A00000000000000000000016 /* LobsterListView.swift */,
+			A0000000000000000000001D /* LobsterDetailView.swift */,
 			A00000000000000000000017 /* TaskListView.swift */,
 			A00000000000000000000018 /* TaskDetailView.swift */,
 			A00000000000000000000019 /* ApprovalCenterView.swift */,
+			A0000000000000000000001E /* ApprovalDetailView.swift */,
 			A0000000000000000000001A /* SettingsView.swift */,
+			A0000000000000000000001F /* PairingFlowView.swift */,
 		);
 		path = "";
 		sourceTree = "<group>";
@@ -150,12 +165,17 @@
 			A00000000000000000000002 /* RootTabView.swift in Sources */,
 			A00000000000000000000003 /* AppModels.swift in Sources */,
 			A00000000000000000000004 /* ConnectorClient.swift in Sources */,
+			A0000000000000000000000B /* MockData.swift in Sources */,
+			A0000000000000000000000C /* AppViewModel.swift in Sources */,
 			A00000000000000000000005 /* DashboardView.swift in Sources */,
 			A00000000000000000000006 /* LobsterListView.swift in Sources */,
+			A0000000000000000000000D /* LobsterDetailView.swift in Sources */,
 			A00000000000000000000007 /* TaskListView.swift in Sources */,
 			A00000000000000000000008 /* TaskDetailView.swift in Sources */,
 			A00000000000000000000009 /* ApprovalCenterView.swift in Sources */,
+			A0000000000000000000000E /* ApprovalDetailView.swift in Sources */,
 			A0000000000000000000000A /* SettingsView.swift in Sources */,
+			A00000000000000000000010 /* PairingFlowView.swift in Sources */,
 		);
 		runOnlyForDeploymentPostprocessing = 0;
 	};

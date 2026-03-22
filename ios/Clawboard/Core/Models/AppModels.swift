@@ -1,6 +1,6 @@
 import Foundation
 
-struct LobsterSummary: Identifiable, Codable {
+struct LobsterSummary: Identifiable, Codable, Hashable {
     let id: String
     let name: String
     let status: String
@@ -10,7 +10,7 @@ struct LobsterSummary: Identifiable, Codable {
     let nodeName: String
 }
 
-struct TaskSummary: Identifiable, Codable {
+struct TaskSummary: Identifiable, Codable, Hashable {
     let id: String
     let title: String
     let status: String
@@ -19,18 +19,33 @@ struct TaskSummary: Identifiable, Codable {
     let currentStep: String
 }
 
-struct ApprovalItem: Identifiable, Codable {
+struct ApprovalItem: Identifiable, Codable, Hashable {
     let id: String
     let title: String
     let reason: String
     let scope: String
     let riskLevel: String
     let expiresAt: String
+    let lobsterName: String
 }
 
-struct AlertItem: Identifiable, Codable {
+struct AlertItem: Identifiable, Codable, Hashable {
     let id: String
     let level: String
     let title: String
     let summary: String
+}
+
+struct NodeSummary: Identifiable, Codable, Hashable {
+    let id: String
+    let name: String
+    let status: String
+    let latencyText: String
+}
+
+struct TaskTimelineStep: Identifiable, Codable, Hashable {
+    let id: String
+    let title: String
+    let detail: String
+    let state: String
 }

@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct RootTabView: View {
+    @StateObject private var viewModel = AppViewModel()
+
     var body: some View {
         TabView {
             DashboardView()
@@ -27,6 +29,10 @@ struct RootTabView: View {
                 .tabItem {
                     Label("设置", systemImage: "gearshape")
                 }
+        }
+        .environmentObject(viewModel)
+        .task {
+            await viewModel.load()
         }
     }
 }

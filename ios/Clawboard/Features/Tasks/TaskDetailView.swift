@@ -1,14 +1,43 @@
 import SwiftUI
 
 struct TaskDetailView: View {
+    let task: TaskSummary
+
+    init(task: TaskSummary = MockData.tasks[0]) {
+        self.task = task
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("客户报告生成")
+                Text(task.title)
                     .font(.title.bold())
-                ProgressView(value: 0.72)
-                Text("当前步骤：CRM 导出")
+                ProgressView(value: Double(task.progress), total: 100)
+                Text("当前步骤：\(task.currentStep)")
                     .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("时间线")
+                        .font(.headline)
+                    ForEach(MockData.taskTimeline) { step in
+                        HStack(alignment: .top, spacing: 12) {
+                            Circle()
+                                .fill(color(for: step.state))
+                                .frame(width: 10, height: 10)
+                                .padding(.top, 6)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(step.title).font(.subheadline.bold())
+                                Text(step.detail)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(.secondarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                    }
+                }
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text("当前卡点")
@@ -26,11 +55,21 @@ struct TaskDetailView: View {
                         .buttonStyle(.borderedProminent)
                     Button("拒绝") {}
                         .buttonStyle(.bordered)
+                    Button("终止", role: .destructive) {}
+                        .buttonStyle(.bordered)
                 }
             }
             .padding()
         }
         .navigationTitle("任务详情")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func color(for state: String) -> Color {
+        switch state {
+        case "done": return .green
+        case "current": return .orange
+        default: return .gray
+        }
     }
 }
