@@ -1,0 +1,447 @@
+const http = require('http');
+const os = require('os');
+
+const VERSION = '0.1.0';
+const HOST = process.env.HOST || '0.0.0.0';
+const PORT = Number(process.env.PORT || 8787);
+const API_TOKEN = process.env.API_TOKEN || '';
+
+const deviceInfo = {
+  id: process.env.NODE_ID || 'node-local-1',
+  name: process.env.CONNECTOR_NAME || os.hostname(),
+  platform: process.env.PLATFORM || process.platform,
+  connector_version: VERSION,
+  network_mode: process.env.NETWORK_MODE || 'direct'
+};
+
+const state = createSeedState(deviceInfo.id);
+
+function createSeedState(nodeId) {
+  return {
+    lobsters: [
+      {
+        id: 'lobster-1',
+        name: '分析龙虾 A-01',
+        status: 'busy',
+        task_title: '客户报告生成',
+        last_active_at: isoNowMinusMinutes(2),
+        risk_level: 'medium',
+        node_id: nodeId,
+        recent_logs: [
+          'step plan completed',
+          'step search completed',
+          'waiting approval for crm_export'
+        ]
+      },
+      {
+        id: 'lobster-2',
+        name: '监控龙虾 OPS-02',
+        status: 'paused',
+        task_title: '巡检与告警归并',
+        last_active_at: isoNowMinusMinutes(18),
+        risk_level: 'low',
+        node_id: nodeId,
+        recent_logs: [
+          'health scan completed',
+          'alert summary prepared',
+          'paused by operator'
+        ]
+      }
+    ],
+    tasks: [
+      {
+        id: 'task-1',
+        title: '客户报告生成',
+        status: 'waiting_approval',
+        progress: 72,
+        lobster_id: 'lobster-1',
+        current_step: 'crm_export',
+        risk_level: 'high',
+        risk_score: 82,
+        input_summary: '生成客户组 A 周报',
+        output_summary: null,
+        error_reason: null,
+        timeline: [
+          { step: 'plan', status: 'done' },
+          { step: 'search', status: 'done' },
+          { step: 'crm_export', status: 'waiting_approval' }
+        ]
+      },
+      {
+        id: 'task-2',
+        title: '巡检与告警归并',
+        status: 'paused',
+        progress: 44,
+        lobster_id: 'lobster-2',
+        current_step: 'aggregate_alerts',
+        risk_level: 'low',
+        risk_score: 24,
+        input_summary: '汇总今日日志与节点状态',
+        output_summary: null,
+        error_reason: null,
+        timeline: [
+          { step: 'collect_nodes', status: 'done' },
+          { step: 'aggregate_alerts', status: 'paused' }
+        ]
+      }
+    ],
+    approvals: [
+      {
+        id: 'approval-1',
+        task_id: 'task-1',
+        lobster_id: 'lobster-1',
+        title: '请求 CRM 导出权限',
+        reason: '生成完整客户报告',
+        scope: '客户组 A',
+        expires_at: isoNowPlusMinutes(30),
+        risk_level: 'high',
+        status: 'pending',
+        resolved_at: null,
+        resolution: null
+      }
+    ],
+    alerts: [
+      {
+        id: 'alert-1',
+        level: 'P2',
+        title: '任务异常重试过多',
+        summary: '任务 task-1 在 10 分钟内失败 3 次',
+        related_type: 'task',
+        related_id: 'task-1'
+      }
+    ]
+  };
+}
+
+function isoNow() {
+  return new Date().toISOString();
+}
+
+function isoNowMinusMinutes(minutes) {
+  return new Date(Date.now() - minutes * 60_000).toISOString();
+}
+
+function isoNowPlusMinutes(minutes) {
+  return new Date(Date.now() + minutes * 60_000).toISOString();
+}
+
+function sendJson(res, statusCode, payload) {
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-cache'
+  });
+  res.end(JSON.stringify(payload, null, 2));
+}
+
+function sendError(res, statusCode, code, message) {
+  return sendJson(res, statusCode, {
+    error: { code, message }
+  });
+}
+
+function notFound(res, entity = 'resource') {
+  return sendError(res, 404, 'not_found', `${entity} not found`);
+}
+
+function unauthorized(res) {
+  return sendError(res, 401, 'unauthorized', 'missing or invalid bearer token');
+}
+
+function invalidRequest(res, message) {
+  return sendError(res, 400, 'invalid_request', message);
+}
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => {
+      if (chunks.length === 0) return resolve({});
+      const text = Buffer.concat(chunks).toString('utf8').trim();
+      if (!text) return resolve({});
+      try {
+        resolve(JSON.parse(text));
+      } catch (error) {
+        reject(error);
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+function matchRoute(pathname, pattern) {
+  const pathParts = pathname.split('/').filter(Boolean);
+  const patternParts = pattern.split('/').filter(Boolean);
+  if (pathParts.length !== patternParts.length) return null;
+
+  const params = {};
+  for (let i = 0; i < patternParts.length; i += 1) {
+    const patternPart = patternParts[i];
+    const pathPart = pathParts[i];
+    if (patternPart.startsWith(':')) {
+      params[patternPart.slice(1)] = decodeURIComponent(pathPart);
+      continue;
+    }
+    if (patternPart !== pathPart) return null;
+  }
+  return params;
+}
+
+function ensureAuth(req, res) {
+  if (!API_TOKEN) return true;
+  const auth = req.headers.authorization || '';
+  if (auth === `Bearer ${API_TOKEN}`) return true;
+  unauthorized(res);
+  return false;
+}
+
+function getTaskById(taskId) {
+  return state.tasks.find(task => task.id === taskId);
+}
+
+function getLobsterById(lobsterId) {
+  return state.lobsters.find(lobster => lobster.id === lobsterId);
+}
+
+function getApprovalById(approvalId) {
+  return state.approvals.find(approval => approval.id === approvalId);
+}
+
+function lobsterDetail(lobster) {
+  const currentTask = state.tasks.find(task => task.lobster_id === lobster.id && ['running', 'waiting_approval', 'paused', 'failed'].includes(task.status)) || null;
+  return {
+    id: lobster.id,
+    name: lobster.name,
+    status: lobster.status,
+    current_task: currentTask
+      ? {
+          id: currentTask.id,
+          title: currentTask.title,
+          progress: currentTask.progress,
+          current_step: currentTask.current_step
+        }
+      : null,
+    recent_logs: lobster.recent_logs
+  };
+}
+
+function controlResponse(action, targetId, extra = {}) {
+  return {
+    ok: true,
+    action,
+    target_id: targetId,
+    time: isoNow(),
+    ...extra
+  };
+}
+
+async function handler(req, res) {
+  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const { pathname, searchParams } = url;
+
+  if (!ensureAuth(req, res)) return;
+
+  if (req.method === 'GET' && pathname === '/health') {
+    return sendJson(res, 200, {
+      status: 'ok',
+      version: VERSION,
+      time: isoNow()
+    });
+  }
+
+  if (req.method === 'GET' && pathname === '/device/info') {
+    return sendJson(res, 200, deviceInfo);
+  }
+
+  if (req.method === 'GET' && pathname === '/lobsters') {
+    return sendJson(res, 200, { items: state.lobsters.map(({ recent_logs, ...summary }) => summary) });
+  }
+
+  let params = matchRoute(pathname, '/lobsters/:id');
+  if (req.method === 'GET' && params) {
+    const lobster = getLobsterById(params.id);
+    if (!lobster) return notFound(res, 'lobster');
+    return sendJson(res, 200, lobsterDetail(lobster));
+  }
+
+  params = matchRoute(pathname, '/lobsters/:id/pause');
+  if (req.method === 'POST' && params) {
+    const lobster = getLobsterById(params.id);
+    if (!lobster) return notFound(res, 'lobster');
+    lobster.status = 'paused';
+    lobster.last_active_at = isoNow();
+    lobster.recent_logs.unshift('paused via connector api');
+    const task = state.tasks.find(item => item.lobster_id === lobster.id && ['running', 'waiting_approval', 'busy'].includes(item.status));
+    if (task) task.status = 'paused';
+    return sendJson(res, 200, controlResponse('pause', lobster.id));
+  }
+
+  params = matchRoute(pathname, '/lobsters/:id/resume');
+  if (req.method === 'POST' && params) {
+    const lobster = getLobsterById(params.id);
+    if (!lobster) return notFound(res, 'lobster');
+    lobster.status = 'busy';
+    lobster.last_active_at = isoNow();
+    lobster.recent_logs.unshift('resumed via connector api');
+    const task = state.tasks.find(item => item.lobster_id === lobster.id && item.status === 'paused');
+    if (task) task.status = 'running';
+    return sendJson(res, 200, controlResponse('resume', lobster.id));
+  }
+
+  params = matchRoute(pathname, '/lobsters/:id/terminate');
+  if (req.method === 'POST' && params) {
+    const lobster = getLobsterById(params.id);
+    if (!lobster) return notFound(res, 'lobster');
+    lobster.status = 'idle';
+    lobster.task_title = null;
+    lobster.last_active_at = isoNow();
+    lobster.recent_logs.unshift('terminated via connector api');
+    const task = state.tasks.find(item => item.lobster_id === lobster.id && ['running', 'waiting_approval', 'paused'].includes(item.status));
+    if (task) {
+      task.status = 'terminated';
+      task.error_reason = 'terminated_by_operator';
+    }
+    return sendJson(res, 200, controlResponse('terminate', lobster.id));
+  }
+
+  if (req.method === 'GET' && pathname === '/tasks') {
+    const status = searchParams.get('status');
+    const lobsterId = searchParams.get('lobster_id');
+    const riskLevel = searchParams.get('risk_level');
+
+    const items = state.tasks.filter(task => {
+      if (status && task.status !== status) return false;
+      if (lobsterId && task.lobster_id !== lobsterId) return false;
+      if (riskLevel && task.risk_level !== riskLevel) return false;
+      return true;
+    });
+
+    return sendJson(res, 200, { items });
+  }
+
+  params = matchRoute(pathname, '/tasks/:id');
+  if (req.method === 'GET' && params) {
+    const task = getTaskById(params.id);
+    if (!task) return notFound(res, 'task');
+    return sendJson(res, 200, task);
+  }
+
+  params = matchRoute(pathname, '/tasks/:id/retry');
+  if (req.method === 'POST' && params) {
+    const task = getTaskById(params.id);
+    if (!task) return notFound(res, 'task');
+    task.status = 'running';
+    task.error_reason = null;
+    task.progress = Math.min(task.progress, 60);
+    task.timeline.push({ step: 'retry', status: 'done' });
+
+    const lobster = getLobsterById(task.lobster_id);
+    if (lobster) {
+      lobster.status = 'busy';
+      lobster.task_title = task.title;
+      lobster.last_active_at = isoNow();
+      lobster.recent_logs.unshift('task retried via connector api');
+    }
+
+    return sendJson(res, 200, controlResponse('retry', task.id));
+  }
+
+  if (req.method === 'GET' && pathname === '/approvals') {
+    const items = state.approvals.filter(approval => approval.status === 'pending');
+    return sendJson(res, 200, { items });
+  }
+
+  params = matchRoute(pathname, '/approvals/:id/approve');
+  if (req.method === 'POST' && params) {
+    const approval = getApprovalById(params.id);
+    if (!approval) return notFound(res, 'approval');
+    if (approval.status !== 'pending') {
+      return invalidRequest(res, 'approval already resolved');
+    }
+
+    let body = {};
+    try {
+      body = await readBody(req);
+    } catch {
+      return invalidRequest(res, 'request body must be valid JSON');
+    }
+
+    approval.status = 'approved';
+    approval.resolved_at = isoNow();
+    approval.resolution = {
+      granted_scope: body.granted_scope || approval.scope,
+      duration_minutes: body.duration_minutes || 30
+    };
+
+    const task = getTaskById(approval.task_id);
+    if (task) {
+      task.status = 'running';
+      task.current_step = 'crm_export';
+      task.timeline = task.timeline.map(step => step.step === 'crm_export' ? { ...step, status: 'in_progress' } : step);
+    }
+
+    const lobster = getLobsterById(approval.lobster_id);
+    if (lobster) {
+      lobster.status = 'busy';
+      lobster.last_active_at = isoNow();
+      lobster.recent_logs.unshift(`approval ${approval.id} approved`);
+    }
+
+    return sendJson(res, 200, controlResponse('approve', approval.id, { approval }));
+  }
+
+  params = matchRoute(pathname, '/approvals/:id/reject');
+  if (req.method === 'POST' && params) {
+    const approval = getApprovalById(params.id);
+    if (!approval) return notFound(res, 'approval');
+    if (approval.status !== 'pending') {
+      return invalidRequest(res, 'approval already resolved');
+    }
+
+    let body = {};
+    try {
+      body = await readBody(req);
+    } catch {
+      return invalidRequest(res, 'request body must be valid JSON');
+    }
+
+    approval.status = 'rejected';
+    approval.resolved_at = isoNow();
+    approval.resolution = {
+      reason: body.reason || 'rejected_by_operator'
+    };
+
+    const task = getTaskById(approval.task_id);
+    if (task) {
+      task.status = 'failed';
+      task.error_reason = 'approval_rejected';
+      task.timeline = task.timeline.map(step => step.step === 'crm_export' ? { ...step, status: 'rejected' } : step);
+    }
+
+    const lobster = getLobsterById(approval.lobster_id);
+    if (lobster) {
+      lobster.status = 'error';
+      lobster.last_active_at = isoNow();
+      lobster.recent_logs.unshift(`approval ${approval.id} rejected`);
+    }
+
+    return sendJson(res, 200, controlResponse('reject', approval.id, { approval }));
+  }
+
+  if (req.method === 'GET' && pathname === '/alerts') {
+    return sendJson(res, 200, { items: state.alerts });
+  }
+
+  return notFound(res);
+}
+
+const server = http.createServer((req, res) => {
+  handler(req, res).catch(error => {
+    console.error(error);
+    sendError(res, 500, 'runtime_unavailable', error.message || 'unexpected server error');
+  });
+});
+
+server.listen(PORT, HOST, () => {
+  console.log(`Clawboard Connector listening on http://${HOST}:${PORT}`);
+});
