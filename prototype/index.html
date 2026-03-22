@@ -3,74 +3,73 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Clawboard · iPhone App Prototype V2</title>
+  <title>Clawboard · Interactive Prototype V3</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
+  <div class="floating-notice" id="global-notice">操作已完成</div>
+
   <div class="page-shell">
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-mark">🦞</div>
         <div>
           <div class="brand-title">Clawboard</div>
-          <div class="brand-sub">iPhone Prototype V2</div>
+          <div class="brand-sub">Interactive Prototype V3</div>
         </div>
       </div>
 
       <nav class="nav">
-        <a class="nav-item active" href="#overview">产品总览</a>
-        <a class="nav-item" href="#dashboard">首页</a>
-        <a class="nav-item" href="#lobsters">龙虾</a>
-        <a class="nav-item" href="#task">任务详情</a>
-        <a class="nav-item" href="#approval">审批</a>
-        <a class="nav-item" href="#pairing">连接引导</a>
+        <button class="nav-item active" data-target="dashboard">首页</button>
+        <button class="nav-item" data-target="lobsters">龙虾</button>
+        <button class="nav-item" data-target="task">任务详情</button>
+        <button class="nav-item" data-target="approval">审批</button>
+        <button class="nav-item" data-target="pairing">设置</button>
       </nav>
 
       <div class="sidebar-note">
-        <div class="note-title">V2 升级重点</div>
-        <div class="note-text">更像真实 iPhone App：原生导航层级、卡片密度更高、状态与干预动作更集中。</div>
+        <div class="note-title">V3 可交互点</div>
+        <div class="note-text">
+          支持页面切换、审批按钮反馈、暂停/终止提示、配对成功反馈、筛选切换。
+        </div>
       </div>
     </aside>
 
     <main class="main">
-      <section class="hero" id="overview">
+      <section class="hero">
         <div class="hero-copy glass">
-          <span class="badge">App First · Local First · SwiftUI Ready</span>
-          <h1>Clawboard：用手机观察、审批、接管龙虾</h1>
-          <p>V2 原型不再像“网页控制台”，而是按 iPhone 原生 App 思路重做：底部 Tab、顶部摘要、列表下钻、任务时间线、审批操作面板、连接 onboarding。</p>
+          <span class="badge">Prototype V3 · Clickable Flow</span>
+          <h1>这次不是静态摆拍，是可点击体验版</h1>
+          <p>可以直接点击左侧导航、底部 Tab 和关键按钮，模拟移动端从首页进入任务、审批和设置的关键路径。</p>
           <div class="hero-points">
-            <span>更像原生 App</span>
-            <span>单手操作优先</span>
-            <span>高风险状态突出</span>
-            <span>适合直接翻译成 SwiftUI</span>
+            <span>点击切页</span>
+            <span>审批反馈</span>
+            <span>配对反馈</span>
+            <span>适合继续翻译成 SwiftUI</span>
           </div>
         </div>
 
         <div class="overview-card glass">
           <div class="overview-head">
-            <strong>本轮交付</strong>
-            <span class="tag">Prototype V2</span>
+            <strong>当前原型状态</strong>
+            <span class="tag">Demo Ready</span>
           </div>
           <ul class="overview-list">
-            <li>首页：状态总览 + 今日重点异常</li>
-            <li>龙虾：列表、筛选、风险标签、节点来源</li>
-            <li>任务：时间线、日志摘要、建议动作</li>
-            <li>审批：高风险权限申请卡片</li>
-            <li>设置：配对流程与节点健康</li>
+            <li>待审批数：<strong data-bind="approvals-count">2</strong></li>
+            <li>异常数：<strong>1</strong></li>
+            <li>任务进度：<strong data-bind="task-progress">72%</strong></li>
+            <li>配对状态：<strong data-bind="pair-status">未配对</strong></li>
           </ul>
         </div>
       </section>
 
-      <section class="phone-showcase">
-        <article class="phone-wrap" id="dashboard">
+      <section class="phone-stage">
+        <article class="phone-wrap active-screen" id="dashboard">
           <div class="phone-label">首页 Dashboard</div>
           <div class="phone-card">
             <div class="phone-frame-top"></div>
             <div class="screen">
-              <div class="statusbar">
-                <span>9:41</span>
-                <span>5G 100%</span>
-              </div>
+              <div class="statusbar"><span>9:41</span><span>5G 100%</span></div>
               <div class="screen-header">
                 <div>
                   <div class="eyebrow">早上好</div>
@@ -81,51 +80,39 @@
 
               <div class="summary-banner blue">
                 <div>
-                  <strong>3 个事项需要你优先处理</strong>
-                  <p>2 个待审批，1 个高优异常</p>
+                  <strong><span data-bind="approvals-count">2</span> 个审批等待处理</strong>
+                  <p>还有 1 个异常需要关注</p>
                 </div>
-                <button class="chip-btn">去处理</button>
+                <button class="chip-btn" data-target="approval">去处理</button>
               </div>
 
               <div class="stats-grid">
-                <div class="stat-card">
-                  <span>在线龙虾</span>
-                  <strong>12</strong>
-                </div>
-                <div class="stat-card">
-                  <span>运行中任务</span>
-                  <strong>8</strong>
-                </div>
-                <div class="stat-card warn">
-                  <span>待审批</span>
-                  <strong>2</strong>
-                </div>
-                <div class="stat-card danger">
-                  <span>异常</span>
-                  <strong>1</strong>
-                </div>
+                <div class="stat-card"><span>在线龙虾</span><strong>12</strong></div>
+                <div class="stat-card"><span>运行中任务</span><strong>8</strong></div>
+                <div class="stat-card warn"><span>待审批</span><strong data-bind="approvals-count">2</strong></div>
+                <div class="stat-card danger"><span>异常</span><strong>1</strong></div>
               </div>
 
               <div class="section-card">
                 <div class="section-head">
                   <h3>重点提醒</h3>
-                  <a href="#approval">查看全部</a>
+                  <button class="inline-link" data-target="approval">查看全部</button>
                 </div>
                 <div class="compact-list">
-                  <div class="compact-item alert">
+                  <button class="compact-item interactive" data-target="approval">
                     <div class="icon danger">!</div>
                     <div>
                       <strong>分析龙虾 A-03 请求 CRM 导出权限</strong>
                       <p>客户组 A · 30 分钟有效</p>
                     </div>
-                  </div>
-                  <div class="compact-item">
+                  </button>
+                  <button class="compact-item interactive" data-target="task">
                     <div class="icon blue">↻</div>
                     <div>
                       <strong>代码龙虾 C-07 重试次数过多</strong>
                       <p>最近 10 分钟失败 3 次</p>
                     </div>
-                  </div>
+                  </button>
                 </div>
               </div>
 
@@ -135,18 +122,18 @@
                   <span>按最近 30 分钟</span>
                 </div>
                 <div class="mini-tiles">
-                  <div class="mini-tile"><strong>A-01</strong><span>报告生成 72%</span></div>
-                  <div class="mini-tile"><strong>B-02</strong><span>等待审批</span></div>
-                  <div class="mini-tile"><strong>D-11</strong><span>浏览器执行中</span></div>
+                  <button class="mini-tile interactive" data-target="task"><strong>A-01</strong><span>报告生成 <span data-bind="task-progress">72%</span></span></button>
+                  <button class="mini-tile interactive" data-target="approval"><strong>B-02</strong><span>等待审批</span></button>
+                  <button class="mini-tile interactive" data-target="lobsters"><strong>D-11</strong><span>浏览器执行中</span></button>
                 </div>
               </div>
 
               <div class="tabbar">
-                <span class="active">首页</span>
-                <span>龙虾</span>
-                <span>任务</span>
-                <span>审批</span>
-                <span>设置</span>
+                <button class="active" data-target="dashboard">首页</button>
+                <button data-target="lobsters">龙虾</button>
+                <button data-target="task">任务</button>
+                <button data-target="approval">审批</button>
+                <button data-target="pairing">设置</button>
               </div>
             </div>
           </div>
@@ -157,10 +144,7 @@
           <div class="phone-card">
             <div class="phone-frame-top"></div>
             <div class="screen">
-              <div class="statusbar">
-                <span>9:41</span>
-                <span>5G 100%</span>
-              </div>
+              <div class="statusbar"><span>9:41</span><span>5G 100%</span></div>
               <div class="screen-header slim">
                 <div>
                   <div class="screen-title">龙虾</div>
@@ -172,45 +156,45 @@
               <div class="search-pill">搜索龙虾 / 任务 / 节点</div>
 
               <div class="segmented">
-                <span class="active">全部</span>
-                <span>运行中</span>
-                <span>待审批</span>
-                <span>异常</span>
+                <button class="active" data-filter="all">全部</button>
+                <button data-filter="running">运行中</button>
+                <button data-filter="approval">待审批</button>
+                <button data-filter="error">异常</button>
               </div>
 
               <div class="stack-cards spaced">
-                <div class="list-card active-border">
+                <button class="list-card active-border interactive" data-target="task">
                   <div class="list-top">
                     <strong>分析龙虾 A-01</strong>
                     <span class="pill success">运行中</span>
                   </div>
-                  <p>任务：客户报告生成 · 72%</p>
+                  <p>任务：客户报告生成 · <span data-bind="task-progress">72%</span></p>
                   <div class="meta-row"><span>节点：MacBook-Pro</span><span>最近活跃：1 分钟前</span></div>
-                </div>
-                <div class="list-card">
+                </button>
+                <button class="list-card interactive" data-target="approval">
                   <div class="list-top">
                     <strong>浏览器龙虾 B-02</strong>
                     <span class="pill warn">待审批</span>
                   </div>
                   <p>任务：发布前校验 · 等待 CRM 导出权限</p>
                   <div class="meta-row"><span>节点：office-linux-1</span><span>风险：中</span></div>
-                </div>
-                <div class="list-card">
+                </button>
+                <button class="list-card interactive" data-target="task">
                   <div class="list-top">
                     <strong>代码龙虾 C-07</strong>
                     <span class="pill danger">异常</span>
                   </div>
                   <p>任务：回归测试失败重试中</p>
                   <div class="meta-row"><span>节点：build-server</span><span>失败：3 次</span></div>
-                </div>
+                </button>
               </div>
 
               <div class="tabbar">
-                <span>首页</span>
-                <span class="active">龙虾</span>
-                <span>任务</span>
-                <span>审批</span>
-                <span>设置</span>
+                <button data-target="dashboard">首页</button>
+                <button class="active" data-target="lobsters">龙虾</button>
+                <button data-target="task">任务</button>
+                <button data-target="approval">审批</button>
+                <button data-target="pairing">设置</button>
               </div>
             </div>
           </div>
@@ -221,10 +205,7 @@
           <div class="phone-card">
             <div class="phone-frame-top"></div>
             <div class="screen">
-              <div class="statusbar">
-                <span>9:41</span>
-                <span>5G 100%</span>
-              </div>
+              <div class="statusbar"><span>9:41</span><span>5G 100%</span></div>
               <div class="screen-header slim">
                 <div>
                   <div class="screen-title">客户报告生成</div>
@@ -236,52 +217,40 @@
               <div class="progress-card">
                 <div class="progress-top">
                   <strong>当前进度</strong>
-                  <span>72%</span>
+                  <span data-bind="task-progress">72%</span>
                 </div>
-                <div class="progress-bar"><span></span></div>
+                <div class="progress-bar"><span data-bind="progress-width" style="width:72%"></span></div>
                 <p>当前步骤：CRM 导出</p>
               </div>
 
               <div class="timeline-list">
-                <div class="timeline-item done">
-                  <div class="timeline-dot"></div>
-                  <div><strong>规划任务</strong><p>已完成</p></div>
-                </div>
-                <div class="timeline-item done">
-                  <div class="timeline-dot"></div>
-                  <div><strong>检索客户上下文</strong><p>已完成</p></div>
-                </div>
-                <div class="timeline-item current">
-                  <div class="timeline-dot"></div>
-                  <div><strong>CRM 导出</strong><p>等待权限批准</p></div>
-                </div>
-                <div class="timeline-item">
-                  <div class="timeline-dot"></div>
-                  <div><strong>生成总结输出</strong><p>未开始</p></div>
-                </div>
+                <div class="timeline-item done"><div class="timeline-dot"></div><div><strong>规划任务</strong><p>已完成</p></div></div>
+                <div class="timeline-item done"><div class="timeline-dot"></div><div><strong>检索客户上下文</strong><p>已完成</p></div></div>
+                <div class="timeline-item current"><div class="timeline-dot"></div><div><strong>CRM 导出</strong><p>等待权限批准</p></div></div>
+                <div class="timeline-item"><div class="timeline-dot"></div><div><strong>生成总结输出</strong><p>未开始</p></div></div>
               </div>
 
               <div class="section-card emphasize-card">
                 <div class="section-head">
                   <h3>当前卡点</h3>
-                  <span>建议处理</span>
+                  <button class="inline-link" data-target="approval">去审批</button>
                 </div>
                 <p>仅申请客户组 A 导出权限，建议授权 30 分钟，任务完成后自动失效。</p>
               </div>
 
               <div class="action-group two-col">
-                <button class="btn primary">批准</button>
-                <button class="btn ghost dark">拒绝</button>
-                <button class="btn ghost dark">暂停</button>
-                <button class="btn danger">终止</button>
+                <button class="btn primary" data-action="approve">批准</button>
+                <button class="btn ghost dark" data-action="reject">拒绝</button>
+                <button class="btn ghost dark" data-action="pause">暂停</button>
+                <button class="btn danger" data-action="terminate">终止</button>
               </div>
 
               <div class="tabbar">
-                <span>首页</span>
-                <span>龙虾</span>
-                <span class="active">任务</span>
-                <span>审批</span>
-                <span>设置</span>
+                <button data-target="dashboard">首页</button>
+                <button data-target="lobsters">龙虾</button>
+                <button class="active" data-target="task">任务</button>
+                <button data-target="approval">审批</button>
+                <button data-target="pairing">设置</button>
               </div>
             </div>
           </div>
@@ -292,14 +261,11 @@
           <div class="phone-card">
             <div class="phone-frame-top"></div>
             <div class="screen">
-              <div class="statusbar">
-                <span>9:41</span>
-                <span>5G 100%</span>
-              </div>
+              <div class="statusbar"><span>9:41</span><span>5G 100%</span></div>
               <div class="screen-header slim">
                 <div>
                   <div class="screen-title">审批</div>
-                  <div class="screen-sub">2 个待处理，高风险优先</div>
+                  <div class="screen-sub"><span data-bind="approvals-count">2</span> 个待处理，高风险优先</div>
                 </div>
               </div>
 
@@ -317,9 +283,9 @@
                   <div><span>申请原因</span><strong>补充报告原始数据</strong></div>
                 </div>
                 <div class="action-group two-col compact-actions">
-                  <button class="btn primary">批准</button>
-                  <button class="btn ghost dark">缩小范围</button>
-                  <button class="btn danger wide">拒绝</button>
+                  <button class="btn primary" data-action="approve">批准</button>
+                  <button class="btn ghost dark" data-action="reject">缩小范围</button>
+                  <button class="btn danger wide" data-action="reject">拒绝</button>
                 </div>
               </div>
 
@@ -338,11 +304,11 @@
               </div>
 
               <div class="tabbar">
-                <span>首页</span>
-                <span>龙虾</span>
-                <span>任务</span>
-                <span class="active">审批</span>
-                <span>设置</span>
+                <button data-target="dashboard">首页</button>
+                <button data-target="lobsters">龙虾</button>
+                <button data-target="task">任务</button>
+                <button class="active" data-target="approval">审批</button>
+                <button data-target="pairing">设置</button>
               </div>
             </div>
           </div>
@@ -353,15 +319,13 @@
           <div class="phone-card">
             <div class="phone-frame-top"></div>
             <div class="screen">
-              <div class="statusbar">
-                <span>9:41</span>
-                <span>5G 100%</span>
-              </div>
+              <div class="statusbar"><span>9:41</span><span>5G 100%</span></div>
               <div class="screen-header slim">
                 <div>
                   <div class="screen-title">设置</div>
                   <div class="screen-sub">节点、配对、安全</div>
                 </div>
+                <span class="pair-status" data-bind="pair-status">未配对</span>
               </div>
 
               <div class="onboarding-card">
@@ -371,12 +335,15 @@
                   <div class="step-item"><span>2</span><div><strong>扫码配对</strong><p>换取长期 token，存入 Keychain</p></div></div>
                   <div class="step-item"><span>3</span><div><strong>开始管理</strong><p>查看状态、审批、暂停/恢复/终止</p></div></div>
                 </div>
+                <div class="action-group">
+                  <button class="btn primary" data-action="pair">模拟扫码配对成功</button>
+                </div>
               </div>
 
               <div class="section-card">
                 <div class="section-head">
                   <h3>节点健康</h3>
-                  <a href="#">全部</a>
+                  <button class="inline-link" data-target="dashboard">返回首页</button>
                 </div>
                 <div class="node-row"><strong>MacBook-Pro</strong><span class="status good">在线</span></div>
                 <div class="node-row"><strong>office-linux-1</strong><span class="status warn">延迟较高</span></div>
@@ -384,11 +351,11 @@
               </div>
 
               <div class="tabbar">
-                <span>首页</span>
-                <span>龙虾</span>
-                <span>任务</span>
-                <span>审批</span>
-                <span class="active">设置</span>
+                <button data-target="dashboard">首页</button>
+                <button data-target="lobsters">龙虾</button>
+                <button data-target="task">任务</button>
+                <button data-target="approval">审批</button>
+                <button class="active" data-target="pairing">设置</button>
               </div>
             </div>
           </div>
@@ -396,5 +363,7 @@
       </section>
     </main>
   </div>
+
+  <script src="./app.js"></script>
 </body>
 </html>
