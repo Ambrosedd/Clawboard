@@ -15,9 +15,11 @@ final class AppViewModel: ObservableObject {
     @Published private(set) var lastSavedAt: Date?
     @Published var demoAutoplayEnabled = true
     @Published private(set) var bridgeConnection: BridgeConnection?
+    @Published private(set) var bridgeConnectionSummary: BridgeConnectionSummary?
 
     private let client = ConnectorClient()
     private let stateStore = AppStateStore()
+    private let credentialStore: BridgeCredentialStoreProtocol = BridgeCredentialStore()
     private var autoplayTask: Task<Void, Never>?
 
     deinit {
@@ -41,13 +43,28 @@ final class AppViewModel: ObservableObject {
     }
 
     func restoreIfPossible() {
-        guard let persisted = stateStore.load() else { return }
+        let persisted = stateStore.load()
+        let credentialRecord = credentialStore.load()
+
+        guard persisted != nil || credentialRecord != nil else { return }
+
         loadPhase = .restoring
-        selectedScenario = persisted.scenario
-        bridgeConnection = persisted.bridgeConnection
-        apply(snapshot: persisted.snapshot)
-        hasLoadedOnce = true
-        lastSavedAt = persisted.savedAt
+
+        if let persisted {
+            selectedScenario = persisted.scenario
+            apply(snapshot: persisted.snapshot)
+            hasLoadedOnce = true
+            lastSavedAt = persisted.savedAt
+            bridgeConnectionSummary = persisted.bridgeConnectionSummary
+            demoAutoplayEnabled = persisted.autoplayEnabled
+        }
+
+        if let credentialRecord {
+            bridgeConnection = credentialRecord.connection
+            bridgeConnectionSummary = credentialRecord.summary
+            selectedScenario = .normal
+        }
+
         loadPhase = .loaded
         startAutoplayIfNeeded()
         toastMessage = bridgeConnection == nil ? "已恢复上次演示状态" : "已恢复上次 Bridge 连接状态"
@@ -112,11 +129,22 @@ final class AppViewModel: ObservableObject {
             )
         )
 
-        bridgeConnection = BridgeConnection(
+        let connection = BridgeConnection(
             baseURL: sanitizedBaseURL,
             token: exchange.token,
             node: exchange.node,
             pairedAt: Date()
+        )
+
+        bridgeConnection = connection
+        bridgeConnectionSummary = connection.summary
+        credentialStore.save(
+            BridgeCredentialRecord(
+                baseURL: connection.baseURL,
+                token: connection.token,
+                node: connection.node,
+                pairedAt: connection.pairedAt
+            )
         )
 
         selectedScenario = .normal
@@ -128,11 +156,21 @@ final class AppViewModel: ObservableObject {
     }
 
     func disconnectBridge() {
-        bridgeConnection = nil
-        hasLoadedOnce = false
-        toastMessage = "已断开 Bridge 连接，回到本地 Demo 模式"
-        persistCurrentState()
         Task {
+            if let bridgeConnection {
+                do {
+                    try await client.revokeCurrentToken(bridgeConnection)
+                } catch {
+                    print("Failed to revoke bridge token: \(error)")
+                }
+            }
+
+            bridgeConnection = nil
+            bridgeConnectionSummary = nil
+            credentialStore.clear()
+            hasLoadedOnce = false
+            toastMessage = "已断开 Bridge 连接，回到本地 Demo 模式"
+            persistCurrentState()
             await refresh()
         }
     }
@@ -220,6 +258,8 @@ final class AppViewModel: ObservableObject {
     func resetDemoState() {
         stateStore.clear()
         bridgeConnection = nil
+        bridgeConnectionSummary = nil
+        credentialStore.clear()
         selectedScenario = .normal
         hasLoadedOnce = false
         lastSavedAt = nil
@@ -281,7 +321,7 @@ final class AppViewModel: ObservableObject {
             snapshot: currentSnapshot,
             savedAt: Date(),
             autoplayEnabled: demoAutoplayEnabled,
-            bridgeConnection: bridgeConnection
+            bridgeConnectionSummary: bridgeConnectionSummary
         )
         stateStore.save(persisted)
         lastSavedAt = persisted.savedAt

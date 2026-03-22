@@ -123,23 +123,29 @@ struct BridgeConnection: Codable, Hashable {
     let pairedAt: Date
 }
 
+struct BridgeConnectionSummary: Codable, Hashable {
+    let baseURL: String
+    let node: BridgeNodeInfo
+    let pairedAt: Date
+}
+
 struct PersistedAppState: Codable, Hashable {
     let scenario: DemoScenario
     let snapshot: AppSnapshot
     let savedAt: Date
     let autoplayEnabled: Bool
-    let bridgeConnection: BridgeConnection?
+    let bridgeConnectionSummary: BridgeConnectionSummary?
 
-    init(scenario: DemoScenario, snapshot: AppSnapshot, savedAt: Date, autoplayEnabled: Bool, bridgeConnection: BridgeConnection?) {
+    init(scenario: DemoScenario, snapshot: AppSnapshot, savedAt: Date, autoplayEnabled: Bool, bridgeConnectionSummary: BridgeConnectionSummary?) {
         self.scenario = scenario
         self.snapshot = snapshot
         self.savedAt = savedAt
         self.autoplayEnabled = autoplayEnabled
-        self.bridgeConnection = bridgeConnection
+        self.bridgeConnectionSummary = bridgeConnectionSummary
     }
 
     private enum CodingKeys: String, CodingKey {
-        case scenario, snapshot, savedAt, autoplayEnabled, bridgeConnection
+        case scenario, snapshot, savedAt, autoplayEnabled, bridgeConnectionSummary, bridgeConnection
     }
 
     init(from decoder: Decoder) throws {
@@ -148,7 +154,14 @@ struct PersistedAppState: Codable, Hashable {
         snapshot = try container.decode(AppSnapshot.self, forKey: .snapshot)
         savedAt = try container.decode(Date.self, forKey: .savedAt)
         autoplayEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoplayEnabled) ?? true
-        bridgeConnection = try container.decodeIfPresent(BridgeConnection.self, forKey: .bridgeConnection)
+
+        if let summary = try container.decodeIfPresent(BridgeConnectionSummary.self, forKey: .bridgeConnectionSummary) {
+            bridgeConnectionSummary = summary
+        } else if let legacy = try container.decodeIfPresent(BridgeConnection.self, forKey: .bridgeConnection) {
+            bridgeConnectionSummary = BridgeConnectionSummary(baseURL: legacy.baseURL, node: legacy.node, pairedAt: legacy.pairedAt)
+        } else {
+            bridgeConnectionSummary = nil
+        }
     }
 }
 
@@ -195,6 +208,12 @@ enum DemoScenario: String, CaseIterable, Identifiable, Codable {
         case .error:
             return "模拟 Bridge 暂时不可用，验证重试与错误提示。"
         }
+    }
+}
+
+extension BridgeConnection {
+    var summary: BridgeConnectionSummary {
+        BridgeConnectionSummary(baseURL: baseURL, node: node, pairedAt: pairedAt)
     }
 }
 

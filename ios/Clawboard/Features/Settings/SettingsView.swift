@@ -11,7 +11,7 @@ struct SettingsView: View {
                         PairingFlowView()
                     }
 
-                    if let bridge = viewModel.bridgeConnection {
+                    if let bridge = viewModel.bridgeConnectionSummary {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("已连接节点：\(bridge.node.name)")
                                 .font(.headline)
@@ -97,6 +97,9 @@ struct SettingsView: View {
                 Section("安全") {
                     Label("配对 Token", systemImage: "key")
                     Label("权限边界说明", systemImage: "lock.shield")
+                    Text("当前版本已把 Bridge 凭证存储抽象从普通状态持久化中拆出，后续可直接切到 Keychain。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("设置")

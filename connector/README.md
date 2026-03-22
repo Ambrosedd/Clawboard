@@ -1,45 +1,39 @@
-# Clawboard Bridge Skeleton
+# Clawboard Bridge
 
-一个**本地优先、零运行时依赖、可直接跑起来**的 Clawboard Bridge / Sidecar 骨架。
+一个**本地优先、零运行时依赖、可直接跑起来**的 Bridge / sidecar 骨架。
 
-当前目标不是做完整 runtime，而是给 iOS App、龙虾 skill，以及后续真实 bridge 适配层一个稳定的本地 API 起点。
-
-## 这是什么
-
-当前推荐架构已经从“独立 Connector”进一步收敛为：
-
-- **Clawboard 作为龙虾 skill 安装**
-- **skill 拉起本地 bridge / sidecar**
-- **bridge 承担配对、状态暴露、控制、审批桥接、安全边界职责**
-
-因此，这个 `connector/` 目录现在更适合理解为：
-
-> **Clawboard Bridge Skeleton**
-
-它保留了早期 connector 的职责，但语义上更接近未来真正的 skill-hosted bridge。
+当前目标不是做完整 runtime，而是给 iOS App 和后续 Lobster skill 适配层一个稳定的本地 API 起点。
 
 ## 为什么这样做
 
-这版仍然选择最轻的实现路线：
+这版选择了最轻的实现路线：
 
 - 使用 Node.js 原生 `http`
 - 不引入 Express / Fastify / 数据库
 - 使用内存中的种子数据模拟 runtime 状态
-- 补上第一版 pair 配对协议骨架
-- 接口尽量贴近 `docs/Connector API 草案.md` 与 `docs/Pair 配对协议设计.md`
+- 接口尽量贴近 `docs/Connector API 草案.md` 与当前 Pair / Auth 设计
 
 这样做的好处：
 
 - 启动成本低
 - 方便在本机、VPS、开发机快速验证
-- 先把 App ↔ Bridge 的配对与 API 形状定住
-- 后续便于迁移到真正的 skill-hosted sidecar
+- API 结构先稳定下来，后续再替换底层实现
+- 不会因为过早工程化拖慢产品闭环
+
+代价也很明确：
+
+- 当前状态**不会持久化**，服务重启后会重置
+- 暂未接入真实 Lobster Runtime
+- 暂未实现 SSE / WebSocket 事件流
+- 鉴权目前仍是本地内存态 token 管理
 
 ## 已实现接口
 
-### 配对
+### 配对与凭证
 - `GET /pair/session`
 - `POST /pair/exchange`
+- `GET /auth/session`
+- `POST /auth/revoke`
 
 ### 基础
 - `GET /health`
@@ -67,75 +61,40 @@
 
 ## 运行
 
-要求：Node.js 20+
-
 ```bash
 cd connector
-cp .env.example .env   # 可选，仅作参考
-npm start
+node src/server.js
 ```
 
-默认监听：`http://0.0.0.0:8787`
-
-启动后会打印：
-- bridge 监听地址
-- 一次性 pair code
-- pair code 过期时间
+默认监听：
+- `http://0.0.0.0:8787`
 
 ## 环境变量
+参考：
+- `.env.example`
 
-- `HOST`：监听地址，默认 `0.0.0.0`
-- `PORT`：监听端口，默认 `8787`
-- `CONNECTOR_NAME`：设备名称
-- `NODE_ID`：节点 ID
-- `PLATFORM`：平台名
-- `NETWORK_MODE`：连接模式，默认 `direct`
-- `API_TOKEN`：预置长期 token（可选）
-- `PAIR_CODE`：启动时指定配对码（可选）
+关键项：
+- `HOST`
+- `PORT`
+- `CONNECTOR_NAME`
+- `NODE_ID`
+- `PLATFORM`
+- `NETWORK_MODE`
+- `PAIR_CODE`
+- `API_TOKEN`
 
-## 配对示例
+## 当前定位
 
-### 1. 读取当前 pair session
-```bash
-curl http://127.0.0.1:8787/pair/session
-```
+它现在更适合被理解为：
 
-### 2. 用配对码换 token
-```bash
-curl -X POST http://127.0.0.1:8787/pair/exchange \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "pair_code":"LX-472911",
-    "device_name":"iPhone 16 Pro",
-    "client_name":"Clawboard iOS",
-    "client_version":"0.1.0"
-  }'
-```
+> **由 Clawboard skill 拉起的本地 Bridge 运行时骨架**
 
-### 3. 用返回 token 请求状态
-```bash
-curl http://127.0.0.1:8787/device/info \
-  -H 'Authorization: Bearer cb_live_xxx'
-```
+而不是一个要被用户单独理解和部署的产品。
 
-## 当前设计取舍
+## 下一步
 
-### 1. 先补 pair 协议骨架
-原因：下一阶段 App 与真实 bridge 的连接，首先要有稳定的首次信任建立流程。
-
-### 2. 仍然先不做持久化
-原因：这一轮重点是**pair 协议 + bridge API 形状**，不是状态恢复。
-
-### 3. 仍然先不做事件流
-原因：先把“配对 → 获取 token → 拉取状态 → 发控制命令”跑通更划算。
-
-### 4. 仍然不开放任意执行能力
-原因：bridge 的目标是安全边界，而不是远控入口。
-
-## 下一步建议
-
-1. iOS 配对页接入 `/pair/session` / `/pair/exchange`
-2. 将 token 存入 Keychain
-3. bridge 增加 token 撤销与 pair session 刷新
-4. 抽出 Runtime Adapter 接真实龙虾 skill/runtime
-5. 再补 SSE / WebSocket 事件流
+- 把 token 存储从内存态升级为可控持久化 / 撤销模型
+- 接入真实 Lobster runtime adapter
+- 增加事件流（SSE / WebSocket）
+- 增加多设备 token 管理与会话枚举
+- 接入 skill 生命周期管理

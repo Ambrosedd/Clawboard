@@ -41,6 +41,14 @@ final class ConnectorClient {
         return try JSONDecoder().decode(BridgePairExchangeResponse.self, from: data)
     }
 
+    func revokeCurrentToken(_ bridgeConnection: BridgeConnection) async throws {
+        var request = try makeRequest(baseURL: bridgeConnection.baseURL, path: "/auth/revoke")
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(bridgeConnection.token)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await session.data(for: request)
+        try validate(response: response, data: data)
+    }
+
     private func fetchSnapshotFromBridge(_ bridgeConnection: BridgeConnection) async throws -> AppSnapshot {
         async let lobstersResponse: LobsterListResponse = fetchAuthorized(bridgeConnection, path: "/lobsters")
         async let tasksResponse: TaskListResponse = fetchAuthorized(bridgeConnection, path: "/tasks")

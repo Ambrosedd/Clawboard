@@ -2,7 +2,7 @@ const http = require('http');
 const os = require('os');
 const crypto = require('crypto');
 
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 const HOST = process.env.HOST || '0.0.0.0';
 const PORT = Number(process.env.PORT || 8787);
 const API_TOKEN = process.env.API_TOKEN || '';
@@ -16,7 +16,19 @@ const deviceInfo = {
 };
 
 const pairing = createPairingSession();
-const issuedTokens = new Set(API_TOKEN ? [API_TOKEN] : []);
+const issuedTokens = new Map();
+if (API_TOKEN) {
+  issuedTokens.set(API_TOKEN, {
+    token: API_TOKEN,
+    created_at: new Date().toISOString(),
+    revoked_at: null,
+    client: {
+      device_name: 'Preconfigured Client',
+      client_name: 'Clawboard App',
+      client_version: VERSION
+    }
+  });
+}
 const state = createSeedState(deviceInfo.id);
 
 function createPairingSession() {
@@ -144,10 +156,33 @@ function isExpired(isoTime) {
   return Date.parse(isoTime) <= Date.now();
 }
 
-function issueToken() {
+function issueToken(client = {}) {
   const token = `cb_live_${crypto.randomBytes(12).toString('hex')}`;
-  issuedTokens.add(token);
+  issuedTokens.set(token, {
+    token,
+    created_at: isoNow(),
+    revoked_at: null,
+    client: {
+      device_name: client.device_name || 'Unknown Device',
+      client_name: client.client_name || 'Clawboard App',
+      client_version: client.client_version || '0.1.0'
+    }
+  });
   return token;
+}
+
+function revokeToken(token) {
+  const record = issuedTokens.get(token);
+  if (!record || record.revoked_at) return false;
+  record.revoked_at = isoNow();
+  issuedTokens.set(token, record);
+  return true;
+}
+
+function getTokenRecord(token) {
+  const record = issuedTokens.get(token);
+  if (!record || record.revoked_at) return null;
+  return record;
 }
 
 function sendJson(res, statusCode, payload) {
@@ -212,11 +247,15 @@ function matchRoute(pathname, pattern) {
   return params;
 }
 
+function extractBearerToken(req) {
+  const auth = req.headers.authorization || '';
+  return auth.startsWith('Bearer ') ? auth.slice(7) : '';
+}
+
 function ensureAuth(req, res) {
   if (req.url.startsWith('/pair/')) return true;
-  const auth = req.headers.authorization || '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  if (token && issuedTokens.has(token)) return true;
+  const token = extractBearerToken(req);
+  if (token && getTokenRecord(token)) return true;
   unauthorized(res);
   return false;
 }
@@ -291,7 +330,7 @@ async function handler(req, res) {
       return invalidRequest(res, 'pair code is invalid or expired', 'pair_code_invalid');
     }
 
-    const token = issueToken();
+    const token = issueToken(body);
     return sendJson(res, 200, {
       token,
       token_type: 'Bearer',
@@ -319,6 +358,32 @@ async function handler(req, res) {
 
   if (req.method === 'GET' && pathname === '/device/info') {
     return sendJson(res, 200, deviceInfo);
+  }
+
+  if (req.method === 'GET' && pathname === '/auth/session') {
+    const token = extractBearerToken(req);
+    const record = getTokenRecord(token);
+    return sendJson(res, 200, {
+      node: {
+        id: deviceInfo.id,
+        name: deviceInfo.name,
+        platform: deviceInfo.platform
+      },
+      session: {
+        token_preview: token ? `${token.slice(0, 12)}...` : null,
+        created_at: record?.created_at || null,
+        client: record?.client || null
+      }
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/auth/revoke') {
+    const token = extractBearerToken(req);
+    const revoked = revokeToken(token);
+    return sendJson(res, 200, {
+      ok: revoked,
+      revoked_at: revoked ? isoNow() : null
+    });
   }
 
   if (req.method === 'GET' && pathname === '/lobsters') {

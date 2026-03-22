@@ -8,7 +8,7 @@ struct DashboardView: View {
             Group {
                 switch viewModel.loadPhase {
                 case .idle, .loading:
-                    LoadingStateView(title: "正在同步龙虾状态", subtitle: "模拟连接 Connector、聚合任务与审批数据。")
+                    LoadingStateView(title: "正在同步龙虾状态", subtitle: viewModel.isBridgeConnected ? "正在连接 Bridge、同步节点与任务状态。" : "模拟连接 Bridge、聚合任务与审批数据。")
                 case .failed(let message):
                     ErrorStateView(title: "首页加载失败", message: message, actionTitle: "重试") {
                         Task { await viewModel.refresh() }
@@ -46,8 +46,20 @@ struct DashboardView: View {
                     }
                 }
                 .overlay(alignment: .topTrailing) {
-                    StatusBadge(text: viewModel.selectedScenario.title, tone: AppTheme.brand)
+                    StatusBadge(text: viewModel.isBridgeConnected ? "真实 Bridge" : viewModel.selectedScenario.title, tone: AppTheme.brand)
                         .padding(12)
+                }
+
+                if let bridge = viewModel.bridgeConnectionSummary {
+                    InfoCard {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("当前已连接 \(bridge.node.name)")
+                                .font(.headline)
+                            Text("通过 \(bridge.baseURL) 直接查看节点、任务、审批和告警。")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
@@ -100,6 +112,13 @@ struct DashboardView: View {
     }
 
     private var summarySubtitle: String {
+        if viewModel.isBridgeConnected, let bridge = viewModel.bridgeConnectionSummary {
+            if viewModel.approvals.isEmpty && viewModel.alerts.isEmpty {
+                return "已连接 \(bridge.node.name)，当前没有待处理阻塞项。"
+            }
+            return "已连接 \(bridge.node.name)，\(viewModel.approvals.count) 个待审批，\(viewModel.alerts.count) 个提醒"
+        }
+
         if viewModel.approvals.isEmpty && viewModel.alerts.isEmpty {
             return "审批与告警都已清空，可以转去观察任务详情。"
         }
