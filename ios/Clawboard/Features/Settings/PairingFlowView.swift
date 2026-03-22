@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct PairingFlowView: View {
+    @EnvironmentObject private var viewModel: AppViewModel
+    @Environment(\.dismiss) private var dismiss
     @State private var pairingCode = "LX-2026-PAIR"
     @State private var isPaired = false
 
@@ -16,6 +18,8 @@ struct PairingFlowView: View {
                 LabeledContent("配对码", value: pairingCode)
                 Button(isPaired ? "已配对成功" : "模拟完成配对") {
                     isPaired = true
+                    viewModel.completePairing()
+                    dismiss()
                 }
                 .buttonStyle(.borderedProminent)
             }

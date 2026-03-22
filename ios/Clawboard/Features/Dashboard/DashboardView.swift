@@ -10,16 +10,18 @@ struct DashboardView: View {
                     Text("你的龙虾今天有点忙")
                         .font(.largeTitle.bold())
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("\(viewModel.approvals.count) 个事项需要优先处理")
-                            .font(.headline)
-                        Text("\(viewModel.approvals.count) 个待审批，\(viewModel.alerts.count) 个提醒")
-                            .foregroundStyle(.secondary)
+                    InfoCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("\(viewModel.approvals.count) 个事项需要优先处理")
+                                .font(.headline)
+                            Text("\(viewModel.approvals.count) 个待审批，\(viewModel.alerts.count) 个提醒")
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.blue.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                    .overlay(alignment: .topTrailing) {
+                        StatusBadge(text: "App First", tone: AppTheme.brand)
+                            .padding(12)
+                    }
 
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         summaryCard(title: "在线龙虾", value: "\(viewModel.lobsters.count)")
@@ -32,17 +34,19 @@ struct DashboardView: View {
                         Text("重点提醒")
                             .font(.headline)
                         ForEach(viewModel.alerts) { alert in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("[\(alert.level)] \(alert.title)")
-                                    .font(.subheadline.bold())
-                                Text(alert.summary)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                            InfoCard {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack {
+                                        Text("[\(alert.level)] \(alert.title)")
+                                            .font(.subheadline.bold())
+                                        Spacer()
+                                        StatusBadge(text: alert.level, tone: alert.level == "P1" ? AppTheme.danger : AppTheme.warning)
+                                    }
+                                    Text(alert.summary)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
-                            .padding()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color(.secondarySystemBackground))
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
                         }
                     }
                 }
@@ -53,16 +57,14 @@ struct DashboardView: View {
     }
 
     private func summaryCard(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.title.bold())
+        InfoCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.title.bold())
+            }
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 }

@@ -12,17 +12,20 @@ struct ApprovalCenterView: View {
                             Text(approval.title)
                                 .font(.headline)
                             Spacer()
-                            Text(approval.riskLevel)
-                                .font(.caption.weight(.semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background((approval.riskLevel == "高风险" ? Color.red : Color.orange).opacity(0.15))
-                                .clipShape(Capsule())
+                            StatusBadge(
+                                text: approval.riskLevel,
+                                tone: approval.riskLevel == "高风险" ? AppTheme.danger : AppTheme.warning
+                            )
                         }
                         Text("\(approval.lobsterName) · \(approval.reason)")
                             .foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 6)
+                }
+            }
+            .overlay {
+                if viewModel.approvals.isEmpty {
+                    ContentUnavailableView("没有待审批项", systemImage: "checkmark.circle", description: Text("所有审批都已经处理完成。"))
                 }
             }
             .navigationTitle("审批")

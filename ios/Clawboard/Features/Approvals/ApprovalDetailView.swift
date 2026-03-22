@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ApprovalDetailView: View {
     let approval: ApprovalItem
+    @EnvironmentObject private var viewModel: AppViewModel
+    @Environment(\.dismiss) private var dismiss
     @State private var note = ""
 
     var body: some View {
@@ -21,10 +23,21 @@ struct ApprovalDetailView: View {
             }
 
             Section {
-                Button("批准") {}
-                    .buttonStyle(.borderedProminent)
-                Button("缩小范围") {}
-                Button("拒绝", role: .destructive) {}
+                Button("批准") {
+                    viewModel.approve(approval)
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button("缩小范围") {
+                    viewModel.toastMessage = "已记录缩小范围请求：\(approval.title)"
+                    dismiss()
+                }
+
+                Button("拒绝", role: .destructive) {
+                    viewModel.reject(approval)
+                    dismiss()
+                }
             }
         }
         .navigationTitle("审批详情")

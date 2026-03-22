@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TaskDetailView: View {
     let task: TaskSummary
+    @EnvironmentObject private var viewModel: AppViewModel
 
     init(task: TaskSummary = MockData.tasks[0]) {
         self.task = task
@@ -13,6 +14,7 @@ struct TaskDetailView: View {
                 Text(task.title)
                     .font(.title.bold())
                 ProgressView(value: Double(task.progress), total: 100)
+                    .tint(AppTheme.brand)
                 Text("当前步骤：\(task.currentStep)")
                     .foregroundStyle(.secondary)
 
@@ -20,44 +22,61 @@ struct TaskDetailView: View {
                     Text("时间线")
                         .font(.headline)
                     ForEach(MockData.taskTimeline) { step in
-                        HStack(alignment: .top, spacing: 12) {
-                            Circle()
-                                .fill(color(for: step.state))
-                                .frame(width: 10, height: 10)
-                                .padding(.top, 6)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(step.title).font(.subheadline.bold())
-                                Text(step.detail)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                        InfoCard {
+                            HStack(alignment: .top, spacing: 12) {
+                                Circle()
+                                    .fill(color(for: step.state))
+                                    .frame(width: 10, height: 10)
+                                    .padding(.top, 6)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(step.title).font(.subheadline.bold())
+                                    Text(step.detail)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(.secondarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("当前卡点")
-                        .font(.headline)
-                    Text("任务正在等待 CRM 导出权限批准。建议授权客户组 A，时效 30 分钟。")
-                        .foregroundStyle(.secondary)
+                InfoCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("当前卡点")
+                                .font(.headline)
+                            Spacer()
+                            StatusBadge(text: task.status, tone: task.status == "waiting_approval" ? AppTheme.warning : AppTheme.brand)
+                        }
+                        Text("任务正在等待 CRM 导出权限批准。建议授权客户组 A，时效 30 分钟。")
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.orange.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 20))
 
                 HStack {
-                    Button("批准") {}
-                        .buttonStyle(.borderedProminent)
-                    Button("拒绝") {}
-                        .buttonStyle(.bordered)
-                    Button("终止", role: .destructive) {}
-                        .buttonStyle(.bordered)
+                    Button("批准") {
+                        if let approval = viewModel.approvals.first {
+                            viewModel.approve(approval)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button("拒绝") {
+                        if let approval = viewModel.approvals.first {
+                            viewModel.reject(approval)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("终止", role: .destructive) {
+                        viewModel.terminateTask()
+                    }
+                    .buttonStyle(.bordered)
                 }
+
+                Button("暂停任务") {
+                    viewModel.pauseTask()
+                }
+                .buttonStyle(.bordered)
             }
             .padding()
         }
@@ -67,8 +86,8 @@ struct TaskDetailView: View {
 
     private func color(for state: String) -> Color {
         switch state {
-        case "done": return .green
-        case "current": return .orange
+        case "done": return AppTheme.success
+        case "current": return AppTheme.warning
         default: return .gray
         }
     }
