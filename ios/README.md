@@ -1,30 +1,20 @@
-# Clawboard iOS
+# iOS 目录说明
 
-当前目录已经包含一个可直接用 Xcode 打开的 SwiftUI Demo 工程：
-- `Clawboard.xcodeproj`
-- `Clawboard/` SwiftUI 源码
-- `Clawboard/Assets.xcassets`
+当前 iOS 目录的目标不是只做页面壳子，而是逐步做成一个**纯 App 就能工作的单机 Demo**。
 
-## 当前状态
-目前 Demo 已覆盖：
-- 首页 / 龙虾 / 任务 / 审批 / 设置 5 个主 Tab
-- 集中式 `AppViewModel` 状态管理
-- 标准 / 空状态 / 错误恢复 3 种演示场景
-- loading / empty / error 三类页面状态
-- 审批、任务、龙虾、提醒之间的基础联动
-- 原生 SwiftUI 轻量组件化（无额外重依赖）
+## 当前已有能力
+- SwiftUI App 工程骨架
+- 首页 / 龙虾 / 任务 / 审批 / 设置
+- Mock 状态联动
+- 审批、任务控制、配对等交互反馈
+- 演示场景切换（标准 / 空状态 / 错误恢复）
+- 本地状态持久化与恢复（基于 UserDefaults + Codable）
 
-## 打开方式
-在 macOS + Xcode 环境中打开：
-- `ios/Clawboard.xcodeproj`
+## 当前阶段原则
+1. 先让纯 App 自己工作
+2. 再把 Connector 当作后续接入层
+3. 避免过早引入重型依赖或复杂持久化方案
 
-## 本轮实现取舍
-1. 优先把 Demo 的状态表达和跨页面联动做真实
-2. 暂不引入额外状态管理或 UI 依赖
-3. 暂时仍以 Demo 场景 / Mock 数据承载演示，后续再切到真实 Connector HTTP
-
-## 下一步建议
-1. 用真实 Connector API 替换 Demo 场景数据源
-2. 增加事件流订阅与更细粒度的刷新策略
-3. 增加本地缓存、最近连接记忆与 Keychain 存储
-4. 继续补异常诊断、重试与更完整的控制动作
+## 后续方向
+- 继续打磨纯 App 单机体验
+- 再逐步把数据源从 Mock/本地状态切到 Connector

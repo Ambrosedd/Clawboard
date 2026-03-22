@@ -62,10 +62,17 @@ struct AppSnapshot: Codable, Hashable {
     let nodes: [NodeSummary]
 }
 
+struct PersistedAppState: Codable, Hashable {
+    let scenario: DemoScenario
+    let snapshot: AppSnapshot
+    let savedAt: Date
+}
+
 enum AppLoadPhase: Equatable {
     case idle
     case loading
     case loaded
+    case restoring
     case failed(String)
 
     var isBlocking: Bool {
@@ -80,7 +87,7 @@ enum AppLoadPhase: Equatable {
     }
 }
 
-enum DemoScenario: String, CaseIterable, Identifiable {
+enum DemoScenario: String, CaseIterable, Identifiable, Codable {
     case normal = "normal"
     case empty = "empty"
     case error = "error"

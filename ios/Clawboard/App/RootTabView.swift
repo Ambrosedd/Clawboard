@@ -33,6 +33,7 @@ struct RootTabView: View {
         .tint(AppTheme.brand)
         .environmentObject(viewModel)
         .task {
+            viewModel.restoreIfPossible()
             await viewModel.load()
         }
         .overlay(alignment: .top) {

@@ -12,8 +12,10 @@ final class AppViewModel: ObservableObject {
     @Published var loadPhase: AppLoadPhase = .idle
     @Published var selectedScenario: DemoScenario = .normal
     @Published private(set) var hasLoadedOnce = false
+    @Published private(set) var lastSavedAt: Date?
 
     private let client = ConnectorClient()
+    private let stateStore = AppStateStore()
 
     var activeTaskCount: Int {
         tasks.filter { !["failed", "completed", "terminated"].contains($0.status) }.count
@@ -21,6 +23,21 @@ final class AppViewModel: ObservableObject {
 
     var hasBlockingApproval: Bool {
         approvals.contains { $0.riskLevel == "高风险" }
+    }
+
+    var currentSnapshot: AppSnapshot {
+        AppSnapshot(lobsters: lobsters, tasks: tasks, approvals: approvals, alerts: alerts, nodes: nodes)
+    }
+
+    func restoreIfPossible() {
+        guard let persisted = stateStore.load() else { return }
+        loadPhase = .restoring
+        selectedScenario = persisted.scenario
+        apply(snapshot: persisted.snapshot)
+        hasLoadedOnce = true
+        lastSavedAt = persisted.savedAt
+        loadPhase = .loaded
+        toastMessage = "已恢复上次演示状态"
     }
 
     func load(force: Bool = false) async {
@@ -37,6 +54,7 @@ final class AppViewModel: ObservableObject {
             apply(snapshot: snapshot)
             hasLoadedOnce = true
             loadPhase = .loaded
+            persistCurrentState()
         } catch {
             clearData()
             hasLoadedOnce = true
@@ -72,6 +90,7 @@ final class AppViewModel: ObservableObject {
             }
         }
 
+        persistCurrentState()
         toastMessage = "已批准：\(approval.title)"
     }
 
@@ -89,6 +108,7 @@ final class AppViewModel: ObservableObject {
             lobsters[lobsterIndex].lastActiveAt = "刚刚"
         }
 
+        persistCurrentState()
         toastMessage = "已拒绝：\(approval.title)"
     }
 
@@ -97,6 +117,7 @@ final class AppViewModel: ObservableObject {
         if nodes.isEmpty {
             nodes = MockData.normalSnapshot.nodes
         }
+        persistCurrentState()
     }
 
     func pauseTask(_ task: TaskSummary) {
@@ -105,6 +126,7 @@ final class AppViewModel: ObservableObject {
             current.currentStep = "等待恢复"
         }
         syncLobster(withTaskID: task.id, statusOverride: "已暂停")
+        persistCurrentState()
         toastMessage = "已暂停任务：\(task.title)"
     }
 
@@ -114,6 +136,7 @@ final class AppViewModel: ObservableObject {
             current.currentStep = "继续执行"
         }
         syncLobster(withTaskID: task.id)
+        persistCurrentState()
         toastMessage = "已恢复任务：\(task.title)"
     }
 
@@ -125,7 +148,18 @@ final class AppViewModel: ObservableObject {
         approvals.removeAll { $0.taskID == task.id }
         alerts.removeAll { $0.relatedTaskID == task.id }
         syncLobster(withTaskID: task.id, statusOverride: "异常")
+        persistCurrentState()
         toastMessage = "已发送终止指令：\(task.title)"
+    }
+
+    func resetDemoState() {
+        stateStore.clear()
+        selectedScenario = .normal
+        hasLoadedOnce = false
+        lastSavedAt = nil
+        Task {
+            await refresh()
+        }
     }
 
     func timeline(for task: TaskSummary) -> [TaskTimelineStep] {
@@ -172,6 +206,16 @@ final class AppViewModel: ObservableObject {
         approvals = []
         alerts = []
         nodes = []
+    }
+
+    private func persistCurrentState() {
+        let persisted = PersistedAppState(
+            scenario: selectedScenario,
+            snapshot: currentSnapshot,
+            savedAt: Date()
+        )
+        stateStore.save(persisted)
+        lastSavedAt = persisted.savedAt
     }
 
     private func updateTask(id: String, mutate: (inout TaskSummary) -> Void) {

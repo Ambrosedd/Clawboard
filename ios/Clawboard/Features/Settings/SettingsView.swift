@@ -20,6 +20,17 @@ struct SettingsView: View {
                     Text(viewModel.selectedScenario.description)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    if let lastSavedAt = viewModel.lastSavedAt {
+                        Text("最近保存：\(lastSavedAt.formatted(date: .omitted, time: .shortened))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button("恢复初始演示状态") {
+                        viewModel.resetDemoState()
+                    }
+                    .foregroundStyle(AppTheme.danger)
                 }
 
                 Section("连接") {
