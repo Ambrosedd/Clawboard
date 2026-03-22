@@ -66,6 +66,26 @@ struct PersistedAppState: Codable, Hashable {
     let scenario: DemoScenario
     let snapshot: AppSnapshot
     let savedAt: Date
+    let autoplayEnabled: Bool
+
+    init(scenario: DemoScenario, snapshot: AppSnapshot, savedAt: Date, autoplayEnabled: Bool) {
+        self.scenario = scenario
+        self.snapshot = snapshot
+        self.savedAt = savedAt
+        self.autoplayEnabled = autoplayEnabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case scenario, snapshot, savedAt, autoplayEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        scenario = try container.decode(DemoScenario.self, forKey: .scenario)
+        snapshot = try container.decode(AppSnapshot.self, forKey: .snapshot)
+        savedAt = try container.decode(Date.self, forKey: .savedAt)
+        autoplayEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoplayEnabled) ?? true
+    }
 }
 
 enum AppLoadPhase: Equatable {
@@ -146,6 +166,7 @@ extension LobsterSummary {
         case "待审批": return AppTheme.warning
         case "异常": return AppTheme.danger
         case "已暂停": return Color.purple
+        case "已完成": return AppTheme.success
         default: return Color.gray
         }
     }

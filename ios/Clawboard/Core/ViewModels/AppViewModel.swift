@@ -13,9 +13,15 @@ final class AppViewModel: ObservableObject {
     @Published var selectedScenario: DemoScenario = .normal
     @Published private(set) var hasLoadedOnce = false
     @Published private(set) var lastSavedAt: Date?
+    @Published var demoAutoplayEnabled = true
 
     private let client = ConnectorClient()
     private let stateStore = AppStateStore()
+    private var autoplayTask: Task<Void, Never>?
+
+    deinit {
+        autoplayTask?.cancel()
+    }
 
     var activeTaskCount: Int {
         tasks.filter { !["failed", "completed", "terminated"].contains($0.status) }.count
@@ -37,6 +43,7 @@ final class AppViewModel: ObservableObject {
         hasLoadedOnce = true
         lastSavedAt = persisted.savedAt
         loadPhase = .loaded
+        startAutoplayIfNeeded()
         toastMessage = "已恢复上次演示状态"
     }
 
@@ -55,6 +62,7 @@ final class AppViewModel: ObservableObject {
             hasLoadedOnce = true
             loadPhase = .loaded
             persistCurrentState()
+            startAutoplayIfNeeded()
         } catch {
             clearData()
             hasLoadedOnce = true
@@ -67,9 +75,20 @@ final class AppViewModel: ObservableObject {
     func changeScenario(_ scenario: DemoScenario) {
         selectedScenario = scenario
         hasLoadedOnce = false
+        stopAutoplay()
         Task {
             await refresh()
         }
+    }
+
+    func setAutoplayEnabled(_ enabled: Bool) {
+        demoAutoplayEnabled = enabled
+        if enabled {
+            startAutoplayIfNeeded()
+        } else {
+            stopAutoplay()
+        }
+        persistCurrentState()
     }
 
     func approve(_ approval: ApprovalItem) {
@@ -157,6 +176,7 @@ final class AppViewModel: ObservableObject {
         selectedScenario = .normal
         hasLoadedOnce = false
         lastSavedAt = nil
+        stopAutoplay()
         Task {
             await refresh()
         }
@@ -212,10 +232,66 @@ final class AppViewModel: ObservableObject {
         let persisted = PersistedAppState(
             scenario: selectedScenario,
             snapshot: currentSnapshot,
-            savedAt: Date()
+            savedAt: Date(),
+            autoplayEnabled: demoAutoplayEnabled
         )
         stateStore.save(persisted)
         lastSavedAt = persisted.savedAt
+    }
+
+    private func startAutoplayIfNeeded() {
+        stopAutoplay()
+        guard demoAutoplayEnabled, selectedScenario == .normal, loadPhase == .loaded else { return }
+
+        autoplayTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(6))
+                guard !Task.isCancelled else { return }
+                await self?.advanceDemoStateIfNeeded()
+            }
+        }
+    }
+
+    private func stopAutoplay() {
+        autoplayTask?.cancel()
+        autoplayTask = nil
+    }
+
+    private func advanceDemoStateIfNeeded() {
+        guard selectedScenario == .normal, loadPhase == .loaded else { return }
+
+        if let waitingIndex = tasks.firstIndex(where: { $0.status == "waiting_approval" }) {
+            let waitingTask = tasks[waitingIndex]
+            if waitingTask.progress < 80 {
+                tasks[waitingIndex].progress = min(waitingTask.progress + 3, 80)
+                tasks[waitingIndex].currentStep = waitingTask.currentStep
+                syncLobster(withTaskID: waitingTask.id)
+                persistCurrentState()
+                return
+            }
+        }
+
+        if let runningIndex = tasks.firstIndex(where: { $0.status == "running" }) {
+            tasks[runningIndex].progress = min(tasks[runningIndex].progress + 6, 100)
+            if tasks[runningIndex].progress >= 100 {
+                tasks[runningIndex].status = "completed"
+                tasks[runningIndex].currentStep = "任务已完成"
+                alerts.removeAll { $0.relatedTaskID == tasks[runningIndex].id }
+                toastMessage = "任务已完成：\(tasks[runningIndex].title)"
+            } else {
+                tasks[runningIndex].currentStep = rollingStep(for: tasks[runningIndex])
+            }
+            syncLobster(withTaskID: tasks[runningIndex].id)
+            persistCurrentState()
+            return
+        }
+
+        if approvals.isEmpty, alerts.isEmpty, tasks.contains(where: { $0.status == "completed" }) {
+            if let completedTask = tasks.first(where: { $0.status == "completed" }) {
+                alerts.append(.init(id: "alert-followup-\(completedTask.id)", level: "P2", title: "结果待确认", summary: "\(completedTask.title) 已完成，建议查看输出摘要。", relatedTaskID: completedTask.id))
+                persistCurrentState()
+            }
+        }
     }
 
     private func updateTask(id: String, mutate: (inout TaskSummary) -> Void) {
@@ -251,6 +327,16 @@ final class AppViewModel: ObservableObject {
         }
         if title.contains("发布前校验") {
             return "通知测试同学"
+        }
+        return "继续执行"
+    }
+
+    private func rollingStep(for task: TaskSummary) -> String {
+        if task.title.contains("客户报告") {
+            return task.progress > 90 ? "整理最终周报" : "生成总结输出"
+        }
+        if task.title.contains("发布前校验") {
+            return task.progress > 90 ? "同步校验结果" : "通知测试同学"
         }
         return "继续执行"
     }

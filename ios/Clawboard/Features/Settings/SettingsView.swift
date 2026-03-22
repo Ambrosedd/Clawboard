@@ -21,6 +21,15 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
+                    Toggle("自动推进演示状态", isOn: Binding(
+                        get: { viewModel.demoAutoplayEnabled },
+                        set: { viewModel.setAutoplayEnabled($0) }
+                    ))
+
+                    Text("开启后，任务会在标准演示场景下缓慢推进，更像系统正在运行。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
                     if let lastSavedAt = viewModel.lastSavedAt {
                         Text("最近保存：\(lastSavedAt.formatted(date: .omitted, time: .shortened))")
                             .font(.caption)
