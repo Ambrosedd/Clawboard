@@ -4,36 +4,76 @@ struct LobsterDetailView: View {
     let lobster: LobsterSummary
     @EnvironmentObject private var viewModel: AppViewModel
 
+    var currentLobster: LobsterSummary {
+        viewModel.lobsters.first(where: { $0.id == lobster.id }) ?? lobster
+    }
+
     var relatedTasks: [TaskSummary] {
-        viewModel.tasks.filter { $0.lobsterID == lobster.id }
+        viewModel.tasks.filter { $0.lobsterID == currentLobster.id }
     }
 
     var body: some View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(lobster.name)
-                        .font(.title3.bold())
-                    Text("状态：\(lobster.status)")
-                    Text("当前任务：\(lobster.taskTitle)")
-                    Text("节点：\(lobster.nodeName)")
+                    HStack {
+                        Text(currentLobster.name)
+                            .font(.title3.bold())
+                        Spacer()
+                        StatusBadge(text: currentLobster.status, tone: currentLobster.statusTone)
+                    }
+                    Text("当前任务：\(currentLobster.taskTitle)")
+                    Text("节点：\(currentLobster.nodeName)")
+                        .foregroundStyle(.secondary)
+                    Text("最近活跃：\(currentLobster.lastActiveAt)")
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)
             }
 
             Section("相关任务") {
-                ForEach(relatedTasks) { task in
-                    NavigationLink(task.title) {
-                        TaskDetailView(task: task)
+                if relatedTasks.isEmpty {
+                    ContentUnavailableView("没有关联任务", systemImage: "tray", description: Text("这个龙虾当前处于待命状态。"))
+                } else {
+                    ForEach(relatedTasks) { task in
+                        NavigationLink {
+                            TaskDetailView(task: task)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text(task.title)
+                                        .font(.headline)
+                                    Spacer()
+                                    StatusBadge(text: task.statusLabel, tone: task.statusTone)
+                                }
+                                Text(task.currentStep)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 4)
+                        }
                     }
                 }
             }
 
             Section("快捷操作") {
-                Button("暂停") {}
-                Button("恢复") {}
-                Button("终止", role: .destructive) {}
+                if let task = relatedTasks.first {
+                    if task.status == "paused" {
+                        Button("恢复") {
+                            viewModel.resumeTask(task)
+                        }
+                    } else {
+                        Button("暂停") {
+                            viewModel.pauseTask(task)
+                        }
+                    }
+
+                    Button("终止", role: .destructive) {
+                        viewModel.terminateTask(task)
+                    }
+                } else {
+                    Text("当前没有可操作的活跃任务")
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .navigationTitle("龙虾详情")

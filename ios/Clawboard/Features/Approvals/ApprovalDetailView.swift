@@ -14,7 +14,11 @@ struct ApprovalDetailView: View {
                 LabeledContent("原因", value: approval.reason)
                 LabeledContent("范围", value: approval.scope)
                 LabeledContent("时效", value: approval.expiresAt)
-                LabeledContent("风险", value: approval.riskLevel)
+                HStack {
+                    Text("风险")
+                    Spacer()
+                    StatusBadge(text: approval.riskLevel, tone: approval.riskTone)
+                }
             }
 
             Section("处理说明") {

@@ -5,30 +5,16 @@ struct LobsterListView: View {
 
     var body: some View {
         NavigationStack {
-            List(viewModel.lobsters) { item in
-                NavigationLink(value: item) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(item.name).font(.headline)
-                            Spacer()
-                            Text(item.status)
-                                .font(.caption.weight(.semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(statusColor(item.status).opacity(0.15))
-                                .clipShape(Capsule())
-                        }
-                        Text(item.taskTitle)
-                            .foregroundStyle(.secondary)
-                        HStack {
-                            Text(item.nodeName)
-                            Spacer()
-                            Text(item.lastActiveAt)
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            Group {
+                switch viewModel.loadPhase {
+                case .idle, .loading:
+                    LoadingStateView(title: "正在同步龙虾列表", subtitle: "加载代理状态、绑定节点和当前任务。")
+                case .failed(let message):
+                    ErrorStateView(title: "龙虾列表加载失败", message: message, actionTitle: "重试") {
+                        Task { await viewModel.refresh() }
                     }
-                    .padding(.vertical, 6)
+                case .loaded:
+                    lobsterListContent
                 }
             }
             .navigationTitle("龙虾")
@@ -38,12 +24,36 @@ struct LobsterListView: View {
         }
     }
 
-    private func statusColor(_ status: String) -> Color {
-        switch status {
-        case "运行中": return .green
-        case "待审批": return .orange
-        case "异常": return .red
-        default: return .gray
+    private var lobsterListContent: some View {
+        List(viewModel.lobsters) { item in
+            NavigationLink(value: item) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(item.name)
+                            .font(.headline)
+                        Spacer()
+                        StatusBadge(text: item.status, tone: item.statusTone)
+                    }
+                    Text(item.taskTitle)
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        Text(item.nodeName)
+                        Spacer()
+                        Text(item.lastActiveAt)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 6)
+            }
+        }
+        .overlay {
+            if viewModel.lobsters.isEmpty {
+                ContentUnavailableView("没有龙虾", systemImage: "square.grid.2x2", description: Text("先去设置页配对 Connector，或者切换到标准演示。"))
+            }
+        }
+        .refreshable {
+            await viewModel.refresh()
         }
     }
 }

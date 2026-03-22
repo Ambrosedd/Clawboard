@@ -54,5 +54,6 @@ struct RootTabView: View {
                     }
             }
         }
+        .animation(.spring(response: 0.3, dampingFraction: 0.86), value: viewModel.toastMessage)
     }
 }

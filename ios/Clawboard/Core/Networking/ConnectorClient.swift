@@ -1,23 +1,16 @@
 import Foundation
 
 final class ConnectorClient {
-    func fetchLobsters() async throws -> [LobsterSummary] {
-        MockData.lobsters
-    }
+    func fetchSnapshot(for scenario: DemoScenario) async throws -> AppSnapshot {
+        try await Task.sleep(for: .milliseconds(650))
 
-    func fetchTasks() async throws -> [TaskSummary] {
-        MockData.tasks
-    }
-
-    func fetchApprovals() async throws -> [ApprovalItem] {
-        MockData.approvals
-    }
-
-    func fetchAlerts() async throws -> [AlertItem] {
-        MockData.alerts
-    }
-
-    func fetchNodes() async throws -> [NodeSummary] {
-        MockData.nodes
+        switch scenario {
+        case .normal:
+            return MockData.normalSnapshot
+        case .empty:
+            return MockData.emptySnapshot
+        case .error:
+            throw URLError(.cannotConnectToHost)
+        }
     }
 }

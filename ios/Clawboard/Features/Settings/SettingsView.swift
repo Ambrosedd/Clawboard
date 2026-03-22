@@ -6,6 +6,22 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section("演示模式") {
+                    Picker("场景", selection: $viewModel.selectedScenario) {
+                        ForEach(DemoScenario.allCases) { scenario in
+                            Text(scenario.title).tag(scenario)
+                        }
+                    }
+                    .pickerStyle(.navigationLink)
+                    .onChange(of: viewModel.selectedScenario) { _, newValue in
+                        viewModel.changeScenario(newValue)
+                    }
+
+                    Text(viewModel.selectedScenario.description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("连接") {
                     NavigationLink("扫码配对") {
                         PairingFlowView()
@@ -14,21 +30,21 @@ struct SettingsView: View {
                 }
 
                 Section("节点健康") {
-                    ForEach(viewModel.nodes) { node in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(node.name)
-                                Text(node.latencyText)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                    if viewModel.nodes.isEmpty {
+                        Text("当前没有节点数据")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(viewModel.nodes) { node in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(node.name)
+                                    Text(node.latencyText)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                StatusBadge(text: node.status, tone: node.statusTone)
                             }
-                            Spacer()
-                            Text(node.status)
-                                .font(.caption.weight(.semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(backgroundColor(node.status).opacity(0.15))
-                                .clipShape(Capsule())
                         }
                     }
                 }
@@ -39,15 +55,6 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("设置")
-        }
-    }
-
-    private func backgroundColor(_ status: String) -> Color {
-        switch status {
-        case "在线": return .green
-        case "延迟较高": return .orange
-        case "异常": return .red
-        default: return .gray
         }
     }
 }
