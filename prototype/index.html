@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>龙虾 OS App First Prototype</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">🦞</div>
+        <div>
+          <div class="brand-title">龙虾 OS</div>
+          <div class="brand-sub">App First Prototype</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a class="nav-item active" href="#dashboard">首页</a>
+        <a class="nav-item" href="#lobsters">龙虾</a>
+        <a class="nav-item" href="#tasks">任务</a>
+        <a class="nav-item" href="#approvals">审批</a>
+        <a class="nav-item" href="#settings">设置</a>
+      </nav>
+      <div class="sidebar-note">
+        <div class="note-title">定位</div>
+        <div class="note-text">本地优先 · 简洁美观 · 先做纯 App</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h1>iPhone 控制台原型</h1>
+          <p>用户通过 App 直接连接 Connector，查看龙虾状态、任务进度、审批和异常。</p>
+        </div>
+        <div class="top-actions">
+          <button class="btn ghost">扫码配对</button>
+          <button class="btn primary">添加节点</button>
+        </div>
+      </header>
+
+      <section class="hero">
+        <div class="hero-copy">
+          <span class="badge">App First</span>
+          <h2>用手机管理龙虾，而不是先搭后台</h2>
+          <p>第一版只聚焦 4 件事：连接、观察、审批、控制。减少用户理解成本，保持本地优先和隐私感。</p>
+          <div class="hero-points">
+            <span>扫码连接</span>
+            <span>实时状态</span>
+            <span>移动审批</span>
+            <span>异常接管</span>
+          </div>
+        </div>
+        <div class="phone-stack">
+          <div class="phone-card large" id="dashboard">
+            <div class="phone-notch"></div>
+            <div class="screen">
+              <div class="screen-header">
+                <div>
+                  <div class="screen-title">首页</div>
+                  <div class="screen-sub">总览你的龙虾</div>
+                </div>
+                <div class="avatar">LX</div>
+              </div>
+              <div class="stats-grid">
+                <div class="stat-card"><span>在线</span><strong>12</strong></div>
+                <div class="stat-card"><span>运行中</span><strong>8</strong></div>
+                <div class="stat-card warn"><span>待审批</span><strong>3</strong></div>
+                <div class="stat-card danger"><span>异常</span><strong>2</strong></div>
+              </div>
+              <div class="section-card">
+                <div class="section-head"><h3>最近异常</h3><a href="#">查看全部</a></div>
+                <div class="list compact">
+                  <div class="list-item"><span class="pill danger">P1</span><div><strong>分析龙虾 A-03</strong><p>请求敏感 CRM 导出权限</p></div></div>
+                  <div class="list-item"><span class="pill warn">P2</span><div><strong>浏览器龙虾 B-02</strong><p>任务重试次数过多</p></div></div>
+                </div>
+              </div>
+              <div class="tabbar">
+                <span class="active">首页</span><span>龙虾</span><span>任务</span><span>审批</span><span>设置</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid-two" id="lobsters">
+        <article class="panel">
+          <div class="panel-head">
+            <h3>龙虾列表</h3>
+            <span class="muted">重点看状态和当前任务</span>
+          </div>
+          <div class="list">
+            <div class="list-item cardish">
+              <div class="status-dot green"></div>
+              <div>
+                <strong>分析龙虾 A-01</strong>
+                <p>运行中 · 客户报告生成</p>
+              </div>
+              <span class="pill success">活跃</span>
+            </div>
+            <div class="list-item cardish">
+              <div class="status-dot orange"></div>
+              <div>
+                <strong>浏览器龙虾 B-02</strong>
+                <p>等待审批 · 发布前校验</p>
+              </div>
+              <span class="pill warn">待审批</span>
+            </div>
+            <div class="list-item cardish">
+              <div class="status-dot red"></div>
+              <div>
+                <strong>代码龙虾 C-03</strong>
+                <p>异常 · 测试失败重试中</p>
+              </div>
+              <span class="pill danger">异常</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel phone-preview">
+          <div class="phone-card small">
+            <div class="phone-notch"></div>
+            <div class="screen">
+              <div class="screen-header slim">
+                <div class="screen-title">龙虾</div>
+                <button class="mini-btn">筛选</button>
+              </div>
+              <div class="stack-cards">
+                <div class="mini-card active-border">
+                  <div class="mini-top"><strong>A-01</strong><span class="pill success">运行中</span></div>
+                  <p>客户报告生成 · 72%</p>
+                </div>
+                <div class="mini-card">
+                  <div class="mini-top"><strong>B-02</strong><span class="pill warn">待审批</span></div>
+                  <p>等待 CRM 导出权限</p>
+                </div>
+                <div class="mini-card">
+                  <div class="mini-top"><strong>C-03</strong><span class="pill danger">异常</span></div>
+                  <p>最近 10 分钟失败 3 次</p>
+                </div>
+              </div>
+              <div class="tabbar"><span>首页</span><span class="active">龙虾</span><span>任务</span><span>审批</span><span>设置</span></div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="grid-two" id="tasks">
+        <article class="panel wide-panel">
+          <div class="panel-head">
+            <h3>任务详情</h3>
+            <span class="muted">看进度、卡点、建议动作</span>
+          </div>
+          <div class="task-layout">
+            <div class="timeline">
+              <div class="timeline-item done"><span>1</span><div><strong>计划</strong><p>已完成</p></div></div>
+              <div class="timeline-item done"><span>2</span><div><strong>检索</strong><p>已完成</p></div></div>
+              <div class="timeline-item current"><span>3</span><div><strong>CRM 导出</strong><p>等待审批</p></div></div>
+              <div class="timeline-item"><span>4</span><div><strong>总结输出</strong><p>尚未开始</p></div></div>
+            </div>
+            <div class="detail-box">
+              <div class="detail-card emphasis">
+                <h4>当前卡点</h4>
+                <p>龙虾需要临时访问 CRM 导出接口，范围仅限客户组 A，有效期建议 30 分钟。</p>
+                <div class="action-row">
+                  <button class="btn primary small-btn">批准</button>
+                  <button class="btn ghost small-btn">拒绝</button>
+                </div>
+              </div>
+              <div class="detail-card">
+                <h4>输入摘要</h4>
+                <p>生成客户组 A 的周报，包含交易摘要、联系人信息和风险标记。</p>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="grid-two" id="approvals">
+        <article class="panel">
+          <div class="panel-head">
+            <h3>审批中心</h3>
+            <span class="muted">移动端处理最关键的敏感动作</span>
+          </div>
+          <div class="approval-card">
+            <div class="approval-top">
+              <div>
+                <strong>#1024 请求 CRM 导出权限</strong>
+                <p>分析龙虾 A-03 · 生成完整客户报告</p>
+              </div>
+              <span class="pill danger">高风险</span>
+            </div>
+            <ul class="meta-list">
+              <li>范围：客户组 A</li>
+              <li>时效：30 分钟</li>
+              <li>原因：任务当前步骤需要</li>
+            </ul>
+            <div class="action-row">
+              <button class="btn primary small-btn">批准</button>
+              <button class="btn ghost small-btn">缩小范围</button>
+              <button class="btn danger small-btn">拒绝</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel" id="settings">
+          <div class="panel-head">
+            <h3>设置与连接</h3>
+            <span class="muted">尽量降低用户操作复杂度</span>
+          </div>
+          <div class="setting-steps">
+            <div class="step-card"><span>1</span><div><strong>安装 Connector</strong><p>运行在你的电脑或服务器上</p></div></div>
+            <div class="step-card"><span>2</span><div><strong>扫码配对</strong><p>App 扫描二维码，建立安全连接</p></div></div>
+            <div class="step-card"><span>3</span><div><strong>开始管理龙虾</strong><p>查看状态、审批和控制动作</p></div></div>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
