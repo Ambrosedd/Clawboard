@@ -129,7 +129,7 @@ struct BridgeConnectionSummary: Codable, Hashable {
     let pairedAt: Date
 }
 
-struct PersistedAppState: Codable, Hashable {
+struct PersistedAppState: Codable {
     let scenario: DemoScenario
     let snapshot: AppSnapshot
     let savedAt: Date
@@ -145,7 +145,7 @@ struct PersistedAppState: Codable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case scenario, snapshot, savedAt, autoplayEnabled, bridgeConnectionSummary, bridgeConnection
+        case scenario, snapshot, savedAt, autoplayEnabled, bridgeConnectionSummary
     }
 
     init(from decoder: Decoder) throws {
@@ -154,14 +154,16 @@ struct PersistedAppState: Codable, Hashable {
         snapshot = try container.decode(AppSnapshot.self, forKey: .snapshot)
         savedAt = try container.decode(Date.self, forKey: .savedAt)
         autoplayEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoplayEnabled) ?? true
+        bridgeConnectionSummary = try container.decodeIfPresent(BridgeConnectionSummary.self, forKey: .bridgeConnectionSummary)
+    }
 
-        if let summary = try container.decodeIfPresent(BridgeConnectionSummary.self, forKey: .bridgeConnectionSummary) {
-            bridgeConnectionSummary = summary
-        } else if let legacy = try container.decodeIfPresent(BridgeConnection.self, forKey: .bridgeConnection) {
-            bridgeConnectionSummary = BridgeConnectionSummary(baseURL: legacy.baseURL, node: legacy.node, pairedAt: legacy.pairedAt)
-        } else {
-            bridgeConnectionSummary = nil
-        }
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(scenario, forKey: .scenario)
+        try container.encode(snapshot, forKey: .snapshot)
+        try container.encode(savedAt, forKey: .savedAt)
+        try container.encode(autoplayEnabled, forKey: .autoplayEnabled)
+        try container.encodeIfPresent(bridgeConnectionSummary, forKey: .bridgeConnectionSummary)
     }
 }
 
