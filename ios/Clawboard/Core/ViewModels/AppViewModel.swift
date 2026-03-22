@@ -14,6 +14,7 @@ final class AppViewModel: ObservableObject {
     @Published private(set) var hasLoadedOnce = false
     @Published private(set) var lastSavedAt: Date?
     @Published var demoAutoplayEnabled = true
+    @Published private(set) var bridgeConnection: BridgeConnection?
 
     private let client = ConnectorClient()
     private let stateStore = AppStateStore()
@@ -31,6 +32,10 @@ final class AppViewModel: ObservableObject {
         approvals.contains { $0.riskLevel == "高风险" }
     }
 
+    var isBridgeConnected: Bool {
+        bridgeConnection != nil
+    }
+
     var currentSnapshot: AppSnapshot {
         AppSnapshot(lobsters: lobsters, tasks: tasks, approvals: approvals, alerts: alerts, nodes: nodes)
     }
@@ -39,12 +44,13 @@ final class AppViewModel: ObservableObject {
         guard let persisted = stateStore.load() else { return }
         loadPhase = .restoring
         selectedScenario = persisted.scenario
+        bridgeConnection = persisted.bridgeConnection
         apply(snapshot: persisted.snapshot)
         hasLoadedOnce = true
         lastSavedAt = persisted.savedAt
         loadPhase = .loaded
         startAutoplayIfNeeded()
-        toastMessage = "已恢复上次演示状态"
+        toastMessage = bridgeConnection == nil ? "已恢复上次演示状态" : "已恢复上次 Bridge 连接状态"
     }
 
     func load(force: Bool = false) async {
@@ -57,7 +63,7 @@ final class AppViewModel: ObservableObject {
         loadPhase = .loading
 
         do {
-            let snapshot = try await client.fetchSnapshot(for: selectedScenario)
+            let snapshot = try await client.fetchSnapshot(for: selectedScenario, bridgeConnection: bridgeConnection)
             apply(snapshot: snapshot)
             hasLoadedOnce = true
             loadPhase = .loaded
@@ -66,9 +72,9 @@ final class AppViewModel: ObservableObject {
         } catch {
             clearData()
             hasLoadedOnce = true
-            loadPhase = .failed("暂时无法连接 Connector，你可以稍后重试。")
+            loadPhase = .failed(isBridgeConnected ? "暂时无法连接 Bridge，你可以稍后重试。" : "暂时无法连接 Bridge / Demo 数据源，你可以稍后重试。")
             toastMessage = "加载数据失败"
-            print("Failed to load demo data: \(error)")
+            print("Failed to load app data: \(error)")
         }
     }
 
@@ -89,6 +95,46 @@ final class AppViewModel: ObservableObject {
             stopAutoplay()
         }
         persistCurrentState()
+    }
+
+    func pairWithBridge(baseURL: String, pairCode: String) async throws {
+        let sanitizedBaseURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sanitizedPairCode = pairCode.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let session = try await client.fetchPairSession(baseURL: sanitizedBaseURL)
+        let exchange = try await client.exchangePairCode(
+            baseURL: sanitizedBaseURL,
+            payload: BridgePairExchangeRequest(
+                pairCode: sanitizedPairCode,
+                deviceName: "Clawboard iPhone",
+                clientName: "Clawboard iOS",
+                clientVersion: "0.1.0"
+            )
+        )
+
+        bridgeConnection = BridgeConnection(
+            baseURL: sanitizedBaseURL,
+            token: exchange.token,
+            node: exchange.node,
+            pairedAt: Date()
+        )
+
+        selectedScenario = .normal
+        hasLoadedOnce = false
+        stopAutoplay()
+        toastMessage = "已连接 \(session.displayName)"
+        persistCurrentState()
+        await refresh()
+    }
+
+    func disconnectBridge() {
+        bridgeConnection = nil
+        hasLoadedOnce = false
+        toastMessage = "已断开 Bridge 连接，回到本地 Demo 模式"
+        persistCurrentState()
+        Task {
+            await refresh()
+        }
     }
 
     func approve(_ approval: ApprovalItem) {
@@ -132,7 +178,7 @@ final class AppViewModel: ObservableObject {
     }
 
     func completePairing() {
-        toastMessage = "配对成功，已连接 Connector"
+        toastMessage = "配对成功，已连接 Bridge"
         if nodes.isEmpty {
             nodes = MockData.normalSnapshot.nodes
         }
@@ -173,6 +219,7 @@ final class AppViewModel: ObservableObject {
 
     func resetDemoState() {
         stateStore.clear()
+        bridgeConnection = nil
         selectedScenario = .normal
         hasLoadedOnce = false
         lastSavedAt = nil
@@ -233,7 +280,8 @@ final class AppViewModel: ObservableObject {
             scenario: selectedScenario,
             snapshot: currentSnapshot,
             savedAt: Date(),
-            autoplayEnabled: demoAutoplayEnabled
+            autoplayEnabled: demoAutoplayEnabled,
+            bridgeConnection: bridgeConnection
         )
         stateStore.save(persisted)
         lastSavedAt = persisted.savedAt
@@ -241,7 +289,7 @@ final class AppViewModel: ObservableObject {
 
     private func startAutoplayIfNeeded() {
         stopAutoplay()
-        guard demoAutoplayEnabled, selectedScenario == .normal, loadPhase == .loaded else { return }
+        guard bridgeConnection == nil, demoAutoplayEnabled, selectedScenario == .normal, loadPhase == .loaded else { return }
 
         autoplayTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -258,7 +306,7 @@ final class AppViewModel: ObservableObject {
     }
 
     private func advanceDemoStateIfNeeded() {
-        guard selectedScenario == .normal, loadPhase == .loaded else { return }
+        guard bridgeConnection == nil, selectedScenario == .normal, loadPhase == .loaded else { return }
 
         if let waitingIndex = tasks.firstIndex(where: { $0.status == "waiting_approval" }) {
             let waitingTask = tasks[waitingIndex]
@@ -316,7 +364,7 @@ final class AppViewModel: ObservableObject {
         case "waiting_approval": return "待审批"
         case "paused": return "已暂停"
         case "failed", "terminated": return "异常"
-        case "completed": return "运行中"
+        case "completed": return "已完成"
         default: return "运行中"
         }
     }

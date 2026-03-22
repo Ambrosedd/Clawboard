@@ -6,6 +6,36 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section("连接") {
+                    NavigationLink("扫码配对") {
+                        PairingFlowView()
+                    }
+
+                    if let bridge = viewModel.bridgeConnection {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("已连接节点：\(bridge.node.name)")
+                                .font(.headline)
+                            Text("地址：\(bridge.baseURL)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text("配对时间：\(bridge.pairedAt.formatted(date: .omitted, time: .shortened))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Button("断开 Bridge 连接") {
+                            viewModel.disconnectBridge()
+                        }
+                        .foregroundStyle(AppTheme.danger)
+                    } else {
+                        Text("当前未连接真实 Bridge，应用将使用本地 Demo 数据。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Label("节点管理", systemImage: "desktopcomputer")
+                }
+
                 Section("演示模式") {
                     Picker("场景", selection: $viewModel.selectedScenario) {
                         ForEach(DemoScenario.allCases) { scenario in
@@ -13,11 +43,12 @@ struct SettingsView: View {
                         }
                     }
                     .pickerStyle(.navigationLink)
+                    .disabled(viewModel.isBridgeConnected)
                     .onChange(of: viewModel.selectedScenario) { _, newValue in
                         viewModel.changeScenario(newValue)
                     }
 
-                    Text(viewModel.selectedScenario.description)
+                    Text(viewModel.isBridgeConnected ? "连接真实 Bridge 时，场景切换会被停用，数据以真实节点状态为准。" : viewModel.selectedScenario.description)
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -25,8 +56,9 @@ struct SettingsView: View {
                         get: { viewModel.demoAutoplayEnabled },
                         set: { viewModel.setAutoplayEnabled($0) }
                     ))
+                    .disabled(viewModel.isBridgeConnected)
 
-                    Text("开启后，任务会在标准演示场景下缓慢推进，更像系统正在运行。")
+                    Text("开启后，任务会在标准演示场景下缓慢推进，更像系统正在运行。连接真实 Bridge 后该能力自动停用。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -40,13 +72,6 @@ struct SettingsView: View {
                         viewModel.resetDemoState()
                     }
                     .foregroundStyle(AppTheme.danger)
-                }
-
-                Section("连接") {
-                    NavigationLink("扫码配对") {
-                        PairingFlowView()
-                    }
-                    Label("节点管理", systemImage: "desktopcomputer")
                 }
 
                 Section("节点健康") {

@@ -62,21 +62,84 @@ struct AppSnapshot: Codable, Hashable {
     let nodes: [NodeSummary]
 }
 
+struct BridgePairSession: Codable, Hashable {
+    let pairingID: String
+    let pairCode: String
+    let expiresAt: String
+    let nodeID: String
+    let displayName: String
+    let bridgeVersion: String
+    let networkHint: String
+
+    private enum CodingKeys: String, CodingKey {
+        case pairingID = "pairing_id"
+        case pairCode = "pair_code"
+        case expiresAt = "expires_at"
+        case nodeID = "node_id"
+        case displayName = "display_name"
+        case bridgeVersion = "bridge_version"
+        case networkHint = "network_hint"
+    }
+}
+
+struct BridgeNodeInfo: Codable, Hashable {
+    let id: String
+    let name: String
+    let platform: String
+}
+
+struct BridgePairExchangeRequest: Codable, Hashable {
+    let pairCode: String
+    let deviceName: String
+    let clientName: String
+    let clientVersion: String
+
+    private enum CodingKeys: String, CodingKey {
+        case pairCode = "pair_code"
+        case deviceName = "device_name"
+        case clientName = "client_name"
+        case clientVersion = "client_version"
+    }
+}
+
+struct BridgePairExchangeResponse: Codable, Hashable {
+    let token: String
+    let tokenType: String
+    let issuedAt: String
+    let node: BridgeNodeInfo
+
+    private enum CodingKeys: String, CodingKey {
+        case token
+        case tokenType = "token_type"
+        case issuedAt = "issued_at"
+        case node
+    }
+}
+
+struct BridgeConnection: Codable, Hashable {
+    let baseURL: String
+    let token: String
+    let node: BridgeNodeInfo
+    let pairedAt: Date
+}
+
 struct PersistedAppState: Codable, Hashable {
     let scenario: DemoScenario
     let snapshot: AppSnapshot
     let savedAt: Date
     let autoplayEnabled: Bool
+    let bridgeConnection: BridgeConnection?
 
-    init(scenario: DemoScenario, snapshot: AppSnapshot, savedAt: Date, autoplayEnabled: Bool) {
+    init(scenario: DemoScenario, snapshot: AppSnapshot, savedAt: Date, autoplayEnabled: Bool, bridgeConnection: BridgeConnection?) {
         self.scenario = scenario
         self.snapshot = snapshot
         self.savedAt = savedAt
         self.autoplayEnabled = autoplayEnabled
+        self.bridgeConnection = bridgeConnection
     }
 
     private enum CodingKeys: String, CodingKey {
-        case scenario, snapshot, savedAt, autoplayEnabled
+        case scenario, snapshot, savedAt, autoplayEnabled, bridgeConnection
     }
 
     init(from decoder: Decoder) throws {
@@ -85,6 +148,7 @@ struct PersistedAppState: Codable, Hashable {
         snapshot = try container.decode(AppSnapshot.self, forKey: .snapshot)
         savedAt = try container.decode(Date.self, forKey: .savedAt)
         autoplayEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoplayEnabled) ?? true
+        bridgeConnection = try container.decodeIfPresent(BridgeConnection.self, forKey: .bridgeConnection)
     }
 }
 
@@ -129,7 +193,7 @@ enum DemoScenario: String, CaseIterable, Identifiable, Codable {
         case .empty:
             return "模拟任务已清空、审批已处理完成后的安静状态。"
         case .error:
-            return "模拟 Connector 暂时不可用，验证重试与错误提示。"
+            return "模拟 Bridge 暂时不可用，验证重试与错误提示。"
         }
     }
 }

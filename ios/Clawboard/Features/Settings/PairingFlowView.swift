@@ -5,7 +5,9 @@ struct PairingFlowView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var bridgeAddress = "http://127.0.0.1:8787"
     @State private var pairingCode = "LX-472911"
-    @State private var isPaired = false
+    @State private var isPairing = false
+    @State private var localError: String?
+    @State private var sessionPreview: BridgePairSession?
 
     var body: some View {
         Form {
@@ -19,21 +21,38 @@ struct PairingFlowView: View {
                 TextField("Bridge 地址", text: $bridgeAddress)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    .keyboardType(.URL)
 
                 TextField("配对码", text: $pairingCode)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
 
-                Button(isPaired ? "已配对成功" : "模拟完成配对") {
-                    isPaired = true
-                    viewModel.completePairing()
-                    dismiss()
+                Button("读取配对会话") {
+                    Task { await loadPairSession() }
+                }
+                .disabled(isPairing)
+
+                if let sessionPreview {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(sessionPreview.displayName)
+                            .font(.headline)
+                        Text("节点：\(sessionPreview.nodeID) · 过期：\(sessionPreview.expiresAt)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Button(isPairing ? "正在配对…" : "完成配对") {
+                    Task { await pair() }
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(isPairing || bridgeAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-                Text("当前先保留为桥接骨架 UI。下一步将接入 /pair/session 与 /pair/exchange，并把 token 保存到 Keychain。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if let localError {
+                    Text(localError)
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.danger)
+                }
             }
 
             Section("说明") {
@@ -43,5 +62,33 @@ struct PairingFlowView: View {
         }
         .navigationTitle("扫码配对")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func loadPairSession() async {
+        isPairing = true
+        localError = nil
+        defer { isPairing = false }
+
+        do {
+            sessionPreview = try await ConnectorClient().fetchPairSession(baseURL: bridgeAddress)
+            if pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                pairingCode = sessionPreview?.pairCode ?? pairingCode
+            }
+        } catch {
+            localError = error.localizedDescription
+        }
+    }
+
+    private func pair() async {
+        isPairing = true
+        localError = nil
+        defer { isPairing = false }
+
+        do {
+            try await viewModel.pairWithBridge(baseURL: bridgeAddress, pairCode: pairingCode)
+            dismiss()
+        } catch {
+            localError = error.localizedDescription
+        }
     }
 }
