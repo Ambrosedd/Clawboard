@@ -7,7 +7,7 @@ struct LobsterListView: View {
         NavigationStack {
             Group {
                 switch viewModel.loadPhase {
-                case .idle, .loading:
+                case .idle, .loading, .restoring:
                     LoadingStateView(title: "正在同步龙虾列表", subtitle: "加载代理状态、绑定节点和当前任务。")
                 case .failed(let message):
                     ErrorStateView(title: "龙虾列表加载失败", message: message, actionTitle: "重试") {

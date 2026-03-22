@@ -7,7 +7,7 @@ struct TaskListView: View {
         NavigationStack {
             Group {
                 switch viewModel.loadPhase {
-                case .idle, .loading:
+                case .idle, .loading, .restoring:
                     LoadingStateView(title: "正在加载任务", subtitle: "为你聚合各个龙虾的执行进度。")
                 case .failed(let message):
                     ErrorStateView(title: "任务列表不可用", message: message, actionTitle: "重试") {

@@ -7,7 +7,7 @@ struct ApprovalCenterView: View {
         NavigationStack {
             Group {
                 switch viewModel.loadPhase {
-                case .idle, .loading:
+                case .idle, .loading, .restoring:
                     LoadingStateView(title: "正在拉取审批项", subtitle: "等待模拟 Connector 返回权限请求。")
                 case .failed(let message):
                     ErrorStateView(title: "审批中心加载失败", message: message, actionTitle: "重试") {
