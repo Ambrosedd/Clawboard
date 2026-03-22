@@ -1,7 +1,8 @@
 const http = require('http');
 const os = require('os');
+const crypto = require('crypto');
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 const HOST = process.env.HOST || '0.0.0.0';
 const PORT = Number(process.env.PORT || 8787);
 const API_TOKEN = process.env.API_TOKEN || '';
@@ -14,7 +15,21 @@ const deviceInfo = {
   network_mode: process.env.NETWORK_MODE || 'direct'
 };
 
+const pairing = createPairingSession();
+const issuedTokens = new Set(API_TOKEN ? [API_TOKEN] : []);
 const state = createSeedState(deviceInfo.id);
+
+function createPairingSession() {
+  return {
+    pairing_id: 'pair-001',
+    pair_code: process.env.PAIR_CODE || 'LX-472911',
+    expires_at: isoNowPlusMinutes(10),
+    node_id: deviceInfo.id,
+    display_name: `${deviceInfo.name} / Clawboard Bridge`,
+    bridge_version: VERSION,
+    network_hint: deviceInfo.network_mode
+  };
+}
 
 function createSeedState(nodeId) {
   return {
@@ -28,7 +43,7 @@ function createSeedState(nodeId) {
         risk_level: 'medium',
         node_id: nodeId,
         recent_logs: [
-          'step plan completed',
+          'bridge attached',
           'step search completed',
           'waiting approval for crm_export'
         ]
@@ -125,6 +140,16 @@ function isoNowPlusMinutes(minutes) {
   return new Date(Date.now() + minutes * 60_000).toISOString();
 }
 
+function isExpired(isoTime) {
+  return Date.parse(isoTime) <= Date.now();
+}
+
+function issueToken() {
+  const token = `cb_live_${crypto.randomBytes(12).toString('hex')}`;
+  issuedTokens.add(token);
+  return token;
+}
+
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
@@ -147,8 +172,8 @@ function unauthorized(res) {
   return sendError(res, 401, 'unauthorized', 'missing or invalid bearer token');
 }
 
-function invalidRequest(res, message) {
-  return sendError(res, 400, 'invalid_request', message);
+function invalidRequest(res, message, code = 'invalid_request') {
+  return sendError(res, 400, code, message);
 }
 
 function readBody(req) {
@@ -188,9 +213,10 @@ function matchRoute(pathname, pattern) {
 }
 
 function ensureAuth(req, res) {
-  if (!API_TOKEN) return true;
+  if (req.url.startsWith('/pair/')) return true;
   const auth = req.headers.authorization || '';
-  if (auth === `Bearer ${API_TOKEN}`) return true;
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (token && issuedTokens.has(token)) return true;
   unauthorized(res);
   return false;
 }
@@ -241,6 +267,48 @@ async function handler(req, res) {
 
   if (!ensureAuth(req, res)) return;
 
+  if (req.method === 'GET' && pathname === '/pair/session') {
+    return sendJson(res, 200, pairing);
+  }
+
+  if (req.method === 'POST' && pathname === '/pair/exchange') {
+    let body = {};
+    try {
+      body = await readBody(req);
+    } catch {
+      return invalidRequest(res, 'request body must be valid JSON');
+    }
+
+    if (!body.pair_code) {
+      return invalidRequest(res, 'pair_code is required');
+    }
+
+    if (isExpired(pairing.expires_at)) {
+      return invalidRequest(res, 'pair code is invalid or expired', 'pair_code_invalid');
+    }
+
+    if (body.pair_code !== pairing.pair_code) {
+      return invalidRequest(res, 'pair code is invalid or expired', 'pair_code_invalid');
+    }
+
+    const token = issueToken();
+    return sendJson(res, 200, {
+      token,
+      token_type: 'Bearer',
+      issued_at: isoNow(),
+      node: {
+        id: deviceInfo.id,
+        name: deviceInfo.name,
+        platform: deviceInfo.platform
+      },
+      client: {
+        device_name: body.device_name || 'Unknown Device',
+        client_name: body.client_name || 'Clawboard App',
+        client_version: body.client_version || '0.1.0'
+      }
+    });
+  }
+
   if (req.method === 'GET' && pathname === '/health') {
     return sendJson(res, 200, {
       status: 'ok',
@@ -270,7 +338,7 @@ async function handler(req, res) {
     if (!lobster) return notFound(res, 'lobster');
     lobster.status = 'paused';
     lobster.last_active_at = isoNow();
-    lobster.recent_logs.unshift('paused via connector api');
+    lobster.recent_logs.unshift('paused via bridge api');
     const task = state.tasks.find(item => item.lobster_id === lobster.id && ['running', 'waiting_approval', 'busy'].includes(item.status));
     if (task) task.status = 'paused';
     return sendJson(res, 200, controlResponse('pause', lobster.id));
@@ -282,7 +350,7 @@ async function handler(req, res) {
     if (!lobster) return notFound(res, 'lobster');
     lobster.status = 'busy';
     lobster.last_active_at = isoNow();
-    lobster.recent_logs.unshift('resumed via connector api');
+    lobster.recent_logs.unshift('resumed via bridge api');
     const task = state.tasks.find(item => item.lobster_id === lobster.id && item.status === 'paused');
     if (task) task.status = 'running';
     return sendJson(res, 200, controlResponse('resume', lobster.id));
@@ -295,7 +363,7 @@ async function handler(req, res) {
     lobster.status = 'idle';
     lobster.task_title = null;
     lobster.last_active_at = isoNow();
-    lobster.recent_logs.unshift('terminated via connector api');
+    lobster.recent_logs.unshift('terminated via bridge api');
     const task = state.tasks.find(item => item.lobster_id === lobster.id && ['running', 'waiting_approval', 'paused'].includes(item.status));
     if (task) {
       task.status = 'terminated';
@@ -340,7 +408,7 @@ async function handler(req, res) {
       lobster.status = 'busy';
       lobster.task_title = task.title;
       lobster.last_active_at = isoNow();
-      lobster.recent_logs.unshift('task retried via connector api');
+      lobster.recent_logs.unshift('task retried via bridge api');
     }
 
     return sendJson(res, 200, controlResponse('retry', task.id));
@@ -443,5 +511,6 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Clawboard Connector listening on http://${HOST}:${PORT}`);
+  console.log(`Clawboard Bridge listening on http://${HOST}:${PORT}`);
+  console.log(`Pair code: ${pairing.pair_code} (expires at ${pairing.expires_at})`);
 });
