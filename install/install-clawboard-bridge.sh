@@ -33,8 +33,8 @@ cat <<EOF
 下一步建议：
 1. 在你的龙虾环境中启用该 skill
 2. 启动本地 bridge / sidecar
-3. 把下面这段“连接串”直接发到手机
-4. 在 Clawboard App → 设置 → 添加龙虾 中直接粘贴
+3. 把下面这段“连接串”复制或直接发到手机
+4. 在 Clawboard App → 设置 → 添加龙虾 中直接粘贴（App 也会尝试自动读取剪贴板）
 
    连接串: ${PAIRING_LINK}
 

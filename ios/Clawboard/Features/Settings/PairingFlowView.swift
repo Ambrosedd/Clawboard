@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private extension BridgePairSession {
     func pairingLink(baseURL: String) -> String {
@@ -18,11 +19,12 @@ struct PairingFlowView: View {
     @State private var localError: String?
     @State private var sessionPreview: BridgePairSession?
     @State private var showAdvancedOptions = false
+    @State private var hasAutofilledFromClipboard = false
 
     var body: some View {
         Form {
             Section("添加龙虾") {
-                Text("优先直接粘贴服务器给你的连接信息。App 会自动拆出配对码和地址。只有自建调试时，才需要手动填地址。")
+                Text("复制服务器给你的连接串后，回到这里直接连接。App 会自动读取并拆出配对信息。")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
@@ -31,9 +33,19 @@ struct PairingFlowView: View {
                     .autocorrectionDisabled()
                     .lineLimit(2...4)
 
-                TextField("或只输入配对码", text: $pairingCode)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
+                if let payload = BridgePairingPayload.parse(from: connectionText) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("已识别连接信息")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppTheme.success)
+                        Text("地址：\(payload.baseURL)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("配对码：\(payload.pairCode)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
 
                 Button(isPairing ? "正在连接…" : "连接这台龙虾") {
                     Task { await pair() }
@@ -45,8 +57,8 @@ struct PairingFlowView: View {
             Section("服务器上怎么操作？") {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("1. 在龙虾环境中安装 Clawboard skill", systemImage: "1.circle")
-                    Label("2. 启用移动连接，让它显示配对码 / 二维码", systemImage: "2.circle")
-                    Label("3. 在手机里输入配对码，完成连接", systemImage: "3.circle")
+                    Label("2. 启用移动连接，复制连接串或显示二维码", systemImage: "2.circle")
+                    Label("3. 在手机里粘贴连接串，或直接扫码", systemImage: "3.circle")
                 }
                 .font(.subheadline)
             }
@@ -57,6 +69,10 @@ struct PairingFlowView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
+
+                    TextField("手动输入配对码（仅兜底）", text: $pairingCode)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
 
                     Button("读取当前配对信息") {
                         Task { await loadPairSession() }
@@ -83,7 +99,7 @@ struct PairingFlowView: View {
             }
 
             Section("说明") {
-                Text("默认情况下，你不需要理解 Bridge、Connector 或 Sidecar。它们是内部实现。你只需要：安装 skill、拿到配对码、在 App 里连接。")
+                Text("默认情况下，你不需要理解 Bridge、Connector 或 Sidecar。它们是内部实现。你只需要：安装 skill、复制连接串、在 App 里连接。")
                     .foregroundStyle(.secondary)
             }
 
@@ -97,11 +113,23 @@ struct PairingFlowView: View {
         }
         .navigationTitle("添加龙虾")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            autofillFromClipboardIfNeeded()
+        }
     }
 
     private var canAttemptPair: Bool {
         if BridgePairingPayload.parse(from: connectionText) != nil { return true }
         return !pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func autofillFromClipboardIfNeeded() {
+        guard !hasAutofilledFromClipboard else { return }
+        hasAutofilledFromClipboard = true
+        guard connectionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
+              BridgePairingPayload.parse(from: pasted) != nil else { return }
+        connectionText = pasted
     }
 
     private func loadPairSession() async {
