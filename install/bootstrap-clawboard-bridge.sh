@@ -26,6 +26,38 @@ fetch() {
   exit 1
 }
 
+detect_public_host() {
+  if [ -n "${PUBLIC_HOST:-}" ]; then
+    printf '%s\n' "${PUBLIC_HOST}"
+    return 0
+  fi
+
+  local ip=""
+  if command -v hostname >/dev/null 2>&1; then
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  fi
+  if [ -z "${ip}" ] && command -v ip >/dev/null 2>&1; then
+    ip="$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}')"
+  fi
+  if [ -z "${ip}" ] && command -v python3 >/dev/null 2>&1; then
+    ip="$(python3 - <<'PY'
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    s.connect(('1.1.1.1', 80))
+    print(s.getsockname()[0])
+finally:
+    s.close()
+PY
+)"
+  fi
+
+  if [ -z "${ip}" ]; then
+    ip="127.0.0.1"
+  fi
+  printf '%s\n' "${ip}"
+}
+
 echo "==> 下载 Clawboard Bridge skill bundle"
 fetch "${BUNDLE_URL}" "${ARCHIVE_PATH}"
 
@@ -51,9 +83,23 @@ if [ ! -f "${TARGET_DIR}/config/bridge.env" ]; then
   cp "${TARGET_DIR}/skill.env.example" "${TARGET_DIR}/config/bridge.env"
 fi
 
+CONFIG_FILE="${TARGET_DIR}/config/bridge.env"
+BRIDGE_PORT="${CLAWBOARD_BRIDGE_PORT:-8787}"
+PAIR_CODE="${CLAWBOARD_PAIR_CODE:-LX-472911}"
+BRIDGE_HOST="$(detect_public_host)"
+
+sed -i "s/^PORT=.*/PORT=${BRIDGE_PORT}/" "${CONFIG_FILE}"
+sed -i "s/^PAIR_CODE=.*/PAIR_CODE=${PAIR_CODE}/" "${CONFIG_FILE}"
+sed -i "s/^PUBLIC_HOST=.*/PUBLIC_HOST=${BRIDGE_HOST}/" "${CONFIG_FILE}"
+
+PAIRING_LINK="clawboard://pair?code=${PAIR_CODE}&url=http://${BRIDGE_HOST}:${BRIDGE_PORT}"
+
 echo
 echo "[OK] Bootstrap 安装完成"
 echo "接下来建议："
 echo "  cd ${TARGET_DIR}"
 echo "  bash scripts/start-bridge.sh"
 echo "  bash scripts/show-connection.sh"
+echo
+echo "默认会优先使用可访问地址生成连接串："
+echo "  ${PAIRING_LINK}"

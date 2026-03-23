@@ -10,10 +10,42 @@ if [ -f "${CONFIG_FILE}" ]; then
   set +a
 fi
 
+detect_public_host() {
+  if [ -n "${PUBLIC_HOST:-}" ]; then
+    printf '%s\n' "${PUBLIC_HOST}"
+    return 0
+  fi
+
+  local ip=""
+  if command -v hostname >/dev/null 2>&1; then
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  fi
+  if [ -z "${ip}" ] && command -v ip >/dev/null 2>&1; then
+    ip="$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}')"
+  fi
+  if [ -z "${ip}" ] && command -v python3 >/dev/null 2>&1; then
+    ip="$(python3 - <<'PY'
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    s.connect(('1.1.1.1', 80))
+    print(s.getsockname()[0])
+finally:
+    s.close()
+PY
+)"
+  fi
+
+  if [ -z "${ip}" ]; then
+    ip="127.0.0.1"
+  fi
+  printf '%s\n' "${ip}"
+}
+
 PORT="${PORT:-8787}"
 PAIR_CODE="${PAIR_CODE:-LX-472911}"
 PUBLIC_PROTOCOL="${PUBLIC_PROTOCOL:-http}"
-PUBLIC_HOST="${PUBLIC_HOST:-127.0.0.1}"
+PUBLIC_HOST="$(detect_public_host)"
 BASE_URL="${PUBLIC_BASE_URL:-${PUBLIC_PROTOCOL}://${PUBLIC_HOST}:${PORT}}"
 
 if command -v curl >/dev/null 2>&1; then
