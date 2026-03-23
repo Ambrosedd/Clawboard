@@ -24,6 +24,7 @@ struct PairingFlowView: View {
     @State private var localError: String?
     @State private var sessionPreview: BridgePairSession?
     @State private var showAdvancedOptions = false
+    @State private var showInstallDetails = false
     @State private var hasAutofilledFromClipboard = false
 
     var body: some View {
@@ -60,69 +61,78 @@ struct PairingFlowView: View {
             }
 
             Section("先让龙虾安装这个 skill") {
-                Text("把下面的一键安装命令复制给你的龙虾执行。装好后，再让龙虾运行 start-bridge.sh 和 show-connection.sh，把连接串发回手机。")
+                Text("最简单的做法：直接复制下面这段完整安装说明发给龙虾。龙虾执行完后，把连接串发回手机。")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("下载链接")
-                        .font(.caption.weight(.semibold))
-                    Text(skillBootstrapURL)
-                        .font(.caption.monospaced())
-                        .textSelection(.enabled)
-                        .foregroundStyle(.secondary)
-
-                    Button("复制下载链接") {
-                        UIPasteboard.general.string = skillBootstrapURL
-                        viewModel.toastMessage = "已复制下载链接"
+                Button {
+                    UIPasteboard.general.string = skillInstallMessage
+                    viewModel.toastMessage = "已复制完整安装说明"
+                } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("复制完整安装说明")
+                            .font(.headline)
+                        Text("包含安装命令、后续命令，以及让龙虾回传连接串的完整话术")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-
-                    Text("一键安装命令")
-                        .font(.caption.weight(.semibold))
-                        .padding(.top, 8)
-                    Text(skillInstallCommand)
-                        .font(.caption.monospaced())
-                        .textSelection(.enabled)
-                        .foregroundStyle(.secondary)
-
-                    Button("复制安装命令") {
-                        UIPasteboard.general.string = skillInstallCommand
-                        viewModel.toastMessage = "已复制安装命令"
-                    }
-
-                    Text("安装后的后续命令")
-                        .font(.caption.weight(.semibold))
-                        .padding(.top, 8)
-                    Text(skillFollowupCommands)
-                        .font(.caption.monospaced())
-                        .textSelection(.enabled)
-                        .foregroundStyle(.secondary)
-
-                    Button("复制后续命令") {
-                        UIPasteboard.general.string = skillFollowupCommands
-                        viewModel.toastMessage = "已复制后续命令"
-                    }
-
-                    Text("可直接转发给龙虾的话术")
-                        .font(.caption.weight(.semibold))
-                        .padding(.top, 8)
-                    Text(skillInstallMessage)
-                        .font(.caption)
-                        .textSelection(.enabled)
-                        .foregroundStyle(.secondary)
-
-                    Button("复制完整安装说明") {
-                        UIPasteboard.general.string = skillInstallMessage
-                        viewModel.toastMessage = "已复制完整安装说明"
-                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .buttonStyle(.borderedProminent)
+
+                Text(skillInstallMessage)
+                    .font(.caption)
+                    .textSelection(.enabled)
+                    .foregroundStyle(.secondary)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("1. 把安装命令发给龙虾执行", systemImage: "1.circle")
-                    Label("2. 让龙虾运行 start-bridge.sh 和 show-connection.sh", systemImage: "2.circle")
+                    Label("1. 把完整安装说明发给龙虾", systemImage: "1.circle")
+                    Label("2. 龙虾执行安装并运行 start-bridge.sh / show-connection.sh", systemImage: "2.circle")
                     Label("3. 把返回的连接串粘贴到这里完成连接", systemImage: "3.circle")
                 }
                 .font(.subheadline)
+
+                DisclosureGroup("查看下载链接 / 安装命令 / 后续命令", isExpanded: $showInstallDetails) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("下载链接")
+                            .font(.caption.weight(.semibold))
+                        Text(skillBootstrapURL)
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                            .foregroundStyle(.secondary)
+
+                        Button("复制下载链接") {
+                            UIPasteboard.general.string = skillBootstrapURL
+                            viewModel.toastMessage = "已复制下载链接"
+                        }
+
+                        Text("一键安装命令")
+                            .font(.caption.weight(.semibold))
+                            .padding(.top, 8)
+                        Text(skillInstallCommand)
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                            .foregroundStyle(.secondary)
+
+                        Button("复制安装命令") {
+                            UIPasteboard.general.string = skillInstallCommand
+                            viewModel.toastMessage = "已复制安装命令"
+                        }
+
+                        Text("安装后的后续命令")
+                            .font(.caption.weight(.semibold))
+                            .padding(.top, 8)
+                        Text(skillFollowupCommands)
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                            .foregroundStyle(.secondary)
+
+                        Button("复制后续命令") {
+                            UIPasteboard.general.string = skillFollowupCommands
+                            viewModel.toastMessage = "已复制后续命令"
+                        }
+                    }
+                }
             }
 
             Section {
