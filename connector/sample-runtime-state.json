@@ -1,0 +1,72 @@
+{
+  "lobsters": [
+    {
+      "id": "lobster-prod-1",
+      "name": "生产龙虾 A",
+      "status": "busy",
+      "task_title": "周报汇总与发版检查",
+      "last_active_at": "2026-03-23T03:20:00Z",
+      "risk_level": "medium",
+      "node_id": "node-prod-1",
+      "recent_logs": [
+        "runtime attached from sample state file",
+        "step collect_context completed",
+        "waiting approval for release_upload"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task-prod-1",
+      "title": "周报汇总与发版检查",
+      "status": "waiting_approval",
+      "progress": 68,
+      "lobster_id": "lobster-prod-1",
+      "current_step": "release_upload",
+      "risk_level": "high",
+      "risk_score": 74,
+      "input_summary": "汇总周报并上传发版产物",
+      "output_summary": null,
+      "error_reason": null,
+      "timeline": [
+        {
+          "step": "collect_context",
+          "status": "done"
+        },
+        {
+          "step": "build_summary",
+          "status": "done"
+        },
+        {
+          "step": "release_upload",
+          "status": "waiting_approval"
+        }
+      ]
+    }
+  ],
+  "approvals": [
+    {
+      "id": "approval-prod-1",
+      "task_id": "task-prod-1",
+      "lobster_id": "lobster-prod-1",
+      "title": "请求上传发版产物",
+      "reason": "需要把周报附件和发版产物上传到指定 bucket",
+      "scope": "release-bucket/tmp",
+      "expires_at": "2026-03-23T04:00:00Z",
+      "risk_level": "high",
+      "status": "pending",
+      "resolved_at": null,
+      "resolution": null
+    }
+  ],
+  "alerts": [
+    {
+      "id": "alert-prod-1",
+      "level": "P2",
+      "title": "生产任务等待审批",
+      "summary": "task-prod-1 等待 release_upload 审批（debounce test）",
+      "related_type": "task",
+      "related_id": "task-prod-1"
+    }
+  ]
+}

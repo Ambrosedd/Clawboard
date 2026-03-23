@@ -1,11 +1,14 @@
 const http = require('http');
 const os = require('os');
+const fs = require('fs');
+const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 const HOST = process.env.HOST || '0.0.0.0';
 const PORT = Number(process.env.PORT || 8787);
 const API_TOKEN = process.env.API_TOKEN || '';
+const STATE_FILE = process.env.STATE_FILE || '';
 
 const deviceInfo = {
   id: process.env.NODE_ID || 'node-local-1',
@@ -32,7 +35,9 @@ if (API_TOKEN) {
     }
   });
 }
-const state = createSeedState(deviceInfo.id);
+let state = createSeedState(deviceInfo.id);
+let stateFileWatcher = null;
+let stateReloadTimer = null;
 
 function createPairingSession() {
   return {
@@ -47,7 +52,7 @@ function createPairingSession() {
 }
 
 function createSeedState(nodeId) {
-  return {
+  return normalizeState({
     lobsters: [
       {
         id: 'lobster-1',
@@ -140,7 +145,98 @@ function createSeedState(nodeId) {
         related_id: 'task-1'
       }
     ]
+  });
+}
+
+function normalizeState(input = {}) {
+  return {
+    lobsters: Array.isArray(input.lobsters) ? input.lobsters.map(item => ({
+      id: item.id,
+      name: item.name,
+      status: item.status,
+      task_title: item.task_title ?? null,
+      last_active_at: item.last_active_at ?? isoNow(),
+      risk_level: item.risk_level ?? 'low',
+      node_id: item.node_id ?? deviceInfo.id,
+      recent_logs: Array.isArray(item.recent_logs) ? item.recent_logs : []
+    })) : [],
+    tasks: Array.isArray(input.tasks) ? input.tasks.map(item => ({
+      id: item.id,
+      title: item.title,
+      status: item.status,
+      progress: Number.isFinite(item.progress) ? item.progress : 0,
+      lobster_id: item.lobster_id,
+      current_step: item.current_step ?? 'unknown',
+      risk_level: item.risk_level ?? 'low',
+      risk_score: Number.isFinite(item.risk_score) ? item.risk_score : 0,
+      input_summary: item.input_summary ?? null,
+      output_summary: item.output_summary ?? null,
+      error_reason: item.error_reason ?? null,
+      timeline: Array.isArray(item.timeline) ? item.timeline : []
+    })) : [],
+    approvals: Array.isArray(input.approvals) ? input.approvals.map(item => ({
+      id: item.id,
+      task_id: item.task_id,
+      lobster_id: item.lobster_id,
+      title: item.title,
+      reason: item.reason,
+      scope: item.scope,
+      expires_at: item.expires_at ?? isoNowPlusMinutes(30),
+      risk_level: item.risk_level ?? 'medium',
+      status: item.status ?? 'pending',
+      resolved_at: item.resolved_at ?? null,
+      resolution: item.resolution ?? null
+    })) : [],
+    alerts: Array.isArray(input.alerts) ? input.alerts.map(item => ({
+      id: item.id,
+      level: item.level,
+      title: item.title,
+      summary: item.summary,
+      related_type: item.related_type ?? null,
+      related_id: item.related_id ?? null
+    })) : []
   };
+}
+
+function loadStateFromFile(filePath) {
+  const resolvedPath = path.resolve(filePath);
+  const raw = fs.readFileSync(resolvedPath, 'utf8');
+  const parsed = JSON.parse(raw);
+  return normalizeState(parsed);
+}
+
+function applyExternalState(nextState, source = 'external_state_file') {
+  state = normalizeState(nextState);
+  publishEvent('runtime.state.reloaded', {
+    source,
+    lobsters: state.lobsters.length,
+    tasks: state.tasks.length,
+    approvals: state.approvals.filter(item => item.status === 'pending').length,
+    alerts: state.alerts.length
+  });
+}
+
+function startStateFileWatcher(filePath) {
+  const resolvedPath = path.resolve(filePath);
+
+  try {
+    const initialState = loadStateFromFile(resolvedPath);
+    applyExternalState(initialState, resolvedPath);
+  } catch (error) {
+    console.error(`Failed to load STATE_FILE ${resolvedPath}:`, error.message);
+  }
+
+  stateFileWatcher = fs.watch(resolvedPath, { persistent: false }, () => {
+    clearTimeout(stateReloadTimer);
+    stateReloadTimer = setTimeout(() => {
+      try {
+        const nextState = loadStateFromFile(resolvedPath);
+        applyExternalState(nextState, resolvedPath);
+      } catch (error) {
+        console.error(`Failed to reload STATE_FILE ${resolvedPath}:`, error.message);
+      }
+    }, 150);
+  });
 }
 
 function isoNow() {
@@ -386,7 +482,8 @@ async function handler(req, res) {
     return sendJson(res, 200, {
       status: 'ok',
       version: VERSION,
-      time: isoNow()
+      time: isoNow(),
+      state_source: STATE_FILE ? 'state_file' : 'seed'
     });
   }
 
@@ -723,8 +820,15 @@ server.listen(PORT, HOST, () => {
   publishEvent('bridge.started', {
     node_id: deviceInfo.id,
     node_name: deviceInfo.name,
-    version: VERSION
+    version: VERSION,
+    state_source: STATE_FILE ? 'state_file' : 'seed'
   });
+  if (STATE_FILE) {
+    startStateFileWatcher(STATE_FILE);
+  }
   console.log(`Clawboard Bridge listening on http://${HOST}:${PORT}`);
   console.log(`Pair code: ${pairing.pair_code} (expires at ${pairing.expires_at})`);
+  if (STATE_FILE) {
+    console.log(`External state file: ${path.resolve(STATE_FILE)}`);
+  }
 });

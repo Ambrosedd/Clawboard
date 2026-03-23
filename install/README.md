@@ -30,3 +30,18 @@ bash install-clawboard-bridge.sh
 - 官方 skill 库
 - 或 `lobster skill install clawboard-bridge`
 - 或 `lobster mobile enable`
+
+## 当前更接近真实接入的方式
+
+如果你的本地 runtime / skill / sidecar 已经能输出标准 JSON 状态快照，
+当前可以先让 Bridge 读取该文件，而不是继续只用内置 seed 数据：
+
+```bash
+cd connector
+STATE_FILE=./sample-runtime-state.json node src/server.js
+```
+
+这是一种很适合当前阶段的中间态：
+- runtime 负责采集真实状态
+- Bridge 负责配对、鉴权、统一 API、SSE 事件流
+- App 不需要知道底层数据到底来自种子数据还是外部状态文件

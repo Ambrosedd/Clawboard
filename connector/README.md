@@ -22,10 +22,13 @@
 
 代价也很明确：
 
-- 当前状态**不会持久化**，服务重启后会重置
-- 暂未接入真实 Lobster Runtime
-- 暂未实现 SSE / WebSocket 事件流
+- 默认种子状态**不会持久化**，服务重启后会重置
+- 暂未直接嵌入真实 Lobster Runtime
 - 鉴权目前仍是本地内存态 token 管理
+
+但当前版本已经新增一个更接近真实接入的中间态：
+- 可通过 `STATE_FILE=/path/to/runtime-state.json` 注入外部运行时快照
+- Bridge 会热重载该 JSON 文件，并继续对 App 暴露稳定 API 与 SSE 事件
 
 ## 已实现接口
 
@@ -66,11 +69,30 @@
 - `bridge.started`
 - `pair.exchanged`
 - `auth.revoked`
+- `runtime.state.reloaded`
 - `lobster.status.changed`
 - `task.progress.updated`
 - `task.failed`
 - `approval.resolved`
 - `alert.created`
+
+## 外部运行时状态注入
+
+如果你已经有一个本地进程、skill、或脚本能把当前 lobster 运行态写成 JSON，
+可以让 Bridge 直接读取它：
+
+```bash
+cd connector
+STATE_FILE=./sample-runtime-state.json node src/server.js
+```
+
+特点：
+- Bridge 启动时读取该文件
+- 文件变化时自动热重载
+- 对外 API 结构保持不变
+- 会发出 `runtime.state.reloaded` 事件
+
+这样可以把“真实运行态采集”与“对 App 暴露稳定 API / 鉴权 / 配对 / SSE”解耦。
 
 ## 运行
 
