@@ -1,0 +1,35 @@
+{
+  "profile_id": "legacy",
+  "profile_title": "Legacy Lobster",
+  "supports": {
+    "directory_access": true,
+    "command_alias": true,
+    "restart": true
+  },
+  "directory_policy": {
+    "mode": "allowlist-prefix",
+    "allowed_prefixes": [
+      "/tmp",
+      "/var/tmp",
+      "/data/releases"
+    ]
+  },
+  "command_aliases": {
+    "git_status": {
+      "title": "Git 状态检查",
+      "command_preview": "git status --short"
+    },
+    "release_build": {
+      "title": "Release 构建",
+      "command_preview": "npm run build"
+    },
+    "restart_worker": {
+      "title": "重启 Worker",
+      "command_preview": "systemctl restart lobster-worker"
+    }
+  },
+  "restart_action": {
+    "type": "signal_file",
+    "path": "./runtime/restart-requested.flag"
+  }
+}

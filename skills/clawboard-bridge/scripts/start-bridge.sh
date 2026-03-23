@@ -3,6 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_FILE="${ROOT_DIR}/config/bridge.env"
+PERMISSION_PROFILE_FILE="${ROOT_DIR}/config/permission-profile.json"
+LEASES_FILE="${ROOT_DIR}/runtime/capability-leases.json"
+RESTART_SIGNAL_FILE="${ROOT_DIR}/runtime/restart-requested.flag"
 RUNTIME_DIR="${ROOT_DIR}/runtime/connector"
 RUN_DIR="${ROOT_DIR}/run"
 LOG_DIR="${ROOT_DIR}/logs"
@@ -13,6 +16,15 @@ mkdir -p "${RUN_DIR}" "${LOG_DIR}" "${ROOT_DIR}/config"
 
 if [ ! -f "${CONFIG_FILE}" ]; then
   cp "${ROOT_DIR}/skill.env.example" "${CONFIG_FILE}"
+fi
+
+if [ ! -f "${PERMISSION_PROFILE_FILE}" ]; then
+  cp "${ROOT_DIR}/config.permission-profile.example.json" "${PERMISSION_PROFILE_FILE}"
+fi
+
+if [ ! -f "${LEASES_FILE}" ]; then
+  mkdir -p "$(dirname "${LEASES_FILE}")"
+  cp "${ROOT_DIR}/runtime.capability-leases.example.json" "${LEASES_FILE}"
 fi
 
 if [ ! -f "${RUNTIME_DIR}/src/server.js" ]; then
@@ -34,6 +46,9 @@ set -a
 source "${CONFIG_FILE}"
 set +a
 
+PERMISSION_PROFILE_PATH="${PERMISSION_PROFILE_FILE}" \
+CAPABILITY_LEASES_FILE="${LEASES_FILE}" \
+RESTART_SIGNAL_FILE="${RESTART_SIGNAL_FILE}" \
 node "${RUNTIME_DIR}/src/server.js" >>"${LOG_FILE}" 2>&1 &
 PID=$!
 echo "${PID}" > "${PID_FILE}"

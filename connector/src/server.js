@@ -10,6 +10,51 @@ const PORT = Number(process.env.PORT || 8787);
 const API_TOKEN = process.env.API_TOKEN || '';
 const STATE_FILE = process.env.STATE_FILE || '';
 const PERMISSION_PROFILE = process.env.PERMISSION_PROFILE || 'legacy';
+const PERMISSION_PROFILE_PATH = process.env.PERMISSION_PROFILE_PATH || '';
+const CAPABILITY_LEASES_FILE = process.env.CAPABILITY_LEASES_FILE || '';
+const RESTART_SIGNAL_FILE = process.env.RESTART_SIGNAL_FILE || '';
+
+function loadPermissionProfile() {
+  if (!PERMISSION_PROFILE_PATH) {
+    return {
+      profile_id: PERMISSION_PROFILE,
+      profile_title: 'Default Legacy Profile',
+      supports: {
+        directory_access: true,
+        command_alias: true,
+        restart: true
+      },
+      directory_policy: {
+        mode: 'allowlist-prefix',
+        allowed_prefixes: ['/tmp', '/var/tmp', '/data/releases']
+      },
+      command_aliases: {
+        git_status: { title: 'Git 状态检查', command_preview: 'git status --short' },
+        release_build: { title: 'Release 构建', command_preview: 'npm run build' },
+        restart_worker: { title: '重启 Worker', command_preview: 'systemctl restart lobster-worker' }
+      },
+      restart_action: RESTART_SIGNAL_FILE ? { type: 'signal_file', path: RESTART_SIGNAL_FILE } : null
+    };
+  }
+
+  try {
+    const raw = fs.readFileSync(PERMISSION_PROFILE_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    return parsed;
+  } catch (error) {
+    console.warn(`Failed to load permission profile from ${PERMISSION_PROFILE_PATH}: ${error.message}`);
+    return {
+      profile_id: PERMISSION_PROFILE,
+      profile_title: 'Fallback Profile',
+      supports: { directory_access: true, command_alias: false, restart: false },
+      directory_policy: { mode: 'allowlist-prefix', allowed_prefixes: ['/tmp'] },
+      command_aliases: {},
+      restart_action: null
+    };
+  }
+}
+
+const permissionProfile = loadPermissionProfile();
 
 const deviceInfo = {
   id: process.env.NODE_ID || 'node-local-1',
@@ -17,24 +62,11 @@ const deviceInfo = {
   platform: process.env.PLATFORM || process.platform,
   connector_version: VERSION,
   network_mode: process.env.NETWORK_MODE || 'direct',
-  permission_profile: PERMISSION_PROFILE
+  permission_profile: permissionProfile.profile_id || PERMISSION_PROFILE
 };
 
 const capabilityLeases = [];
-const commandAliases = {
-  git_status: {
-    title: 'Git 状态检查',
-    command_preview: 'git status --short'
-  },
-  release_build: {
-    title: 'Release 构建',
-    command_preview: 'npm run build'
-  },
-  restart_worker: {
-    title: '重启 Worker',
-    command_preview: 'systemctl restart lobster-worker'
-  }
-};
+const commandAliases = permissionProfile.command_aliases || {};
 
 const pairing = createPairingSession();
 const issuedTokens = new Map();
@@ -561,9 +593,26 @@ function getApprovalById(approvalId) {
   return state.approvals.find(approval => approval.id === approvalId);
 }
 
+function persistCapabilityLeases() {
+  if (!CAPABILITY_LEASES_FILE) return;
+  const payload = {
+    schema_version: 'clawboard.capability.leases.v1',
+    updated_at: isoNow(),
+    items: currentCapabilityLeases()
+  };
+  fs.mkdirSync(path.dirname(CAPABILITY_LEASES_FILE), { recursive: true });
+  fs.writeFileSync(CAPABILITY_LEASES_FILE, JSON.stringify(payload, null, 2));
+}
+
 function currentCapabilityLeases() {
   const now = Date.now();
-  return capabilityLeases.filter(lease => Date.parse(lease.expires_at) > now);
+  const active = capabilityLeases.filter(lease => Date.parse(lease.expires_at) > now);
+  if (active.length !== capabilityLeases.length) {
+    capabilityLeases.length = 0;
+    capabilityLeases.push(...active);
+    persistCapabilityLeases();
+  }
+  return active;
 }
 
 function createCapabilityLease({ approval, grantedScope, durationMinutes, capabilityKind }) {
@@ -579,6 +628,7 @@ function createCapabilityLease({ approval, grantedScope, durationMinutes, capabi
     created_at: isoNow()
   };
   capabilityLeases.push(lease);
+  persistCapabilityLeases();
   return lease;
 }
 
@@ -588,11 +638,28 @@ function appendLobsterLog(lobster, message) {
   lobster.recent_logs = lobster.recent_logs.slice(0, 12);
 }
 
+function requestProfileRestart(reason, lobster, task) {
+  const action = permissionProfile.restart_action;
+  if (!action) return false;
+  try {
+    if (action.type === 'signal_file' && action.path) {
+      const resolved = path.isAbsolute(action.path) ? action.path : path.resolve(process.cwd(), action.path);
+      fs.mkdirSync(path.dirname(resolved), { recursive: true });
+      fs.writeFileSync(resolved, JSON.stringify({ reason, time: isoNow(), lobster_id: lobster?.id || null, task_id: task?.id || null }, null, 2));
+      return true;
+    }
+  } catch (error) {
+    console.warn(`Failed to request restart action: ${error.message}`);
+  }
+  return false;
+}
+
 function restartLobsterRuntime(lobster, task, reason = 'restart_requested') {
   if (!lobster) return;
+  const restartIssued = requestProfileRestart(reason, lobster, task);
   lobster.status = 'busy';
   lobster.last_active_at = isoNow();
-  appendLobsterLog(lobster, `runtime restarted via bridge (${reason})`);
+  appendLobsterLog(lobster, restartIssued ? `runtime restart requested via profile (${reason})` : `runtime restarted via bridge (${reason})`);
   if (task) {
     task.status = 'running';
     task.current_step = 'restart_runtime';
@@ -743,8 +810,12 @@ async function handler(req, res) {
     return sendJson(res, 200, {
       ...deviceInfo,
       state_status: stateSourceStatus,
-      supported_capability_kinds: ['directory_access', 'command_alias'],
+      permission_profile_title: permissionProfile.profile_title || null,
+      supported_capability_kinds: Object.entries(permissionProfile.supports || {})
+        .filter(([, enabled]) => Boolean(enabled))
+        .map(([key]) => key),
       supported_command_aliases: Object.entries(commandAliases).map(([id, item]) => ({ id, ...item })),
+      directory_policy: permissionProfile.directory_policy || null,
       active_capability_leases: currentCapabilityLeases()
     });
   }
@@ -933,8 +1004,16 @@ async function handler(req, res) {
     const restartAfterGrant = Boolean(body.restart_after_grant);
     const commandAlias = capabilityKind === 'command_alias' ? String(body.command_alias || '').trim() : null;
 
+    const allowedPrefixes = permissionProfile.directory_policy?.allowed_prefixes || [];
+
     if (capabilityKind === 'command_alias' && (!commandAlias || !commandAliases[commandAlias])) {
       return invalidRequest(res, 'command_alias must be one of the supported aliases');
+    }
+    if (capabilityKind === 'directory_access') {
+      const allowed = allowedPrefixes.length === 0 || allowedPrefixes.some(prefix => grantedScope === prefix || grantedScope.startsWith(`${prefix}/`));
+      if (!allowed) {
+        return invalidRequest(res, `granted_scope must stay within allowed prefixes: ${allowedPrefixes.join(', ') || '(none configured)'}`);
+      }
     }
 
     approval.status = 'approved';

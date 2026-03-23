@@ -8,11 +8,15 @@
 - `scripts/stop-bridge.sh` — 停止 Bridge
 - `scripts/status-bridge.sh` — 查看运行状态
 - `scripts/show-connection.sh` — 查看可发给手机的连接串
+- `scripts/restart-lobster.sh` — 手动写入受限重启请求
 
 ## 目录约定
 
 - `config/bridge.env` — 本地配置
+- `config/permission-profile.json` — 龙虾权限档位与白名单配置
 - `runtime/connector/` — Bridge 运行时
+- `runtime/capability-leases.json` — 当前生效中的临时授权租约
+- `runtime/restart-requested.flag` — 受限重启请求标记
 - `logs/` — 运行日志
 - `run/` — PID 等运行状态
 
