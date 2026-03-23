@@ -1,10 +1,19 @@
 import SwiftUI
 
+private extension BridgePairSession {
+    func pairingLink(baseURL: String) -> String {
+        let encodedURL = baseURL.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? baseURL
+        let encodedCode = pairCode.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? pairCode
+        return "clawboard://pair?code=\(encodedCode)&url=\(encodedURL)"
+    }
+}
+
 struct PairingFlowView: View {
     @EnvironmentObject private var viewModel: AppViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var bridgeAddress = "http://127.0.0.1:8787"
     @State private var pairingCode = ""
+    @State private var connectionText = ""
     @State private var isPairing = false
     @State private var localError: String?
     @State private var sessionPreview: BridgePairSession?
@@ -13,11 +22,16 @@ struct PairingFlowView: View {
     var body: some View {
         Form {
             Section("添加龙虾") {
-                Text("先在你的服务器上安装并启用 Clawboard skill，然后把显示出来的配对码填到这里。")
+                Text("优先直接粘贴服务器给你的连接信息。App 会自动拆出配对码和地址。只有自建调试时，才需要手动填地址。")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
-                TextField("输入配对码", text: $pairingCode)
+                TextField("粘贴连接信息 / 配对串 / 二维码内容", text: $connectionText, axis: .vertical)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .lineLimit(2...4)
+
+                TextField("或只输入配对码", text: $pairingCode)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
 
@@ -25,7 +39,7 @@ struct PairingFlowView: View {
                     Task { await pair() }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(isPairing || pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(isPairing || !canAttemptPair)
             }
 
             Section("服务器上怎么操作？") {
@@ -59,6 +73,10 @@ struct PairingFlowView: View {
                             Text("过期：\(sessionPreview.expiresAt)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                            Text("建议直接分享这段连接串给手机：\n\(sessionPreview.pairingLink ?? sessionPreview.pairingLink(baseURL: sessionPreview.bridgeURL ?? bridgeAddress))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
                         }
                     }
                 }
@@ -81,6 +99,11 @@ struct PairingFlowView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
+    private var canAttemptPair: Bool {
+        if BridgePairingPayload.parse(from: connectionText) != nil { return true }
+        return !pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private func loadPairSession() async {
         isPairing = true
         localError = nil
@@ -88,8 +111,14 @@ struct PairingFlowView: View {
 
         do {
             sessionPreview = try await ConnectorClient().fetchPairSession(baseURL: bridgeAddress)
-            if pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                pairingCode = sessionPreview?.pairCode ?? pairingCode
+            if let sessionPreview {
+                if pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    pairingCode = sessionPreview.pairCode
+                }
+                if let bridgeURL = sessionPreview.bridgeURL, !bridgeURL.isEmpty {
+                    bridgeAddress = bridgeURL
+                }
+                connectionText = sessionPreview.pairingLink ?? sessionPreview.pairingLink(baseURL: sessionPreview.bridgeURL ?? bridgeAddress)
             }
         } catch {
             localError = error.localizedDescription
@@ -102,7 +131,13 @@ struct PairingFlowView: View {
         defer { isPairing = false }
 
         do {
-            try await viewModel.pairWithBridge(baseURL: bridgeAddress, pairCode: pairingCode)
+            if let payload = BridgePairingPayload.parse(from: connectionText) {
+                bridgeAddress = payload.baseURL
+                pairingCode = payload.pairCode
+                try await viewModel.pairWithBridge(payload: payload)
+            } else {
+                try await viewModel.pairWithBridge(baseURL: bridgeAddress, pairCode: pairingCode)
+            }
             dismiss()
         } catch {
             localError = error.localizedDescription

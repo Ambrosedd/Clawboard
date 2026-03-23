@@ -23,14 +23,24 @@ cat <<EOF
 
 [OK] 已安装 skill: ${SKILL_NAME}
 
+BRIDGE_HOST="$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'your-server-ip')"
+PAIRING_LINK="clawboard://pair?code=${PAIR_CODE}&url=http://${BRIDGE_HOST}:${BRIDGE_PORT}"
+
+cat <<EOF
+
+[OK] 已安装 skill: ${SKILL_NAME}
+
 下一步建议：
 1. 在你的龙虾环境中启用该 skill
 2. 启动本地 bridge / sidecar
-3. 打开 Clawboard App → 设置 → 添加龙虾
-4. 输入下面这组连接信息：
+3. 把下面这段“连接串”直接发到手机
+4. 在 Clawboard App → 设置 → 添加龙虾 中直接粘贴
 
+   连接串: ${PAIRING_LINK}
+
+手动兜底（仅调试时再用）：
    配对码: ${PAIR_CODE}
-   Bridge 地址: http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'your-server-ip'):${BRIDGE_PORT}
+   Bridge 地址: http://${BRIDGE_HOST}:${BRIDGE_PORT}
 
 说明：
 - 这是前期骨架安装脚本，用于快速分发 skill

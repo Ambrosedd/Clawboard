@@ -70,6 +70,8 @@ struct BridgePairSession: Codable, Hashable {
     let displayName: String
     let bridgeVersion: String
     let networkHint: String
+    let bridgeURL: String?
+    let pairingLink: String?
 
     private enum CodingKeys: String, CodingKey {
         case pairingID = "pairing_id"
@@ -79,6 +81,8 @@ struct BridgePairSession: Codable, Hashable {
         case displayName = "display_name"
         case bridgeVersion = "bridge_version"
         case networkHint = "network_hint"
+        case bridgeURL = "bridge_url"
+        case pairingLink = "pairing_link"
     }
 }
 
@@ -127,6 +131,55 @@ struct BridgeConnectionSummary: Codable, Hashable {
     let baseURL: String
     let node: BridgeNodeInfo
     let pairedAt: Date
+}
+
+struct BridgePairingPayload: Hashable {
+    let baseURL: String
+    let pairCode: String
+
+    static func parse(from raw: String) -> BridgePairingPayload? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let url = URL(string: trimmed), url.scheme?.lowercased() == "clawboard",
+           let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            let items = components.queryItems ?? []
+            let code = items.first(where: { $0.name == "code" })?.value?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let baseURL = items.first(where: { $0.name == "url" })?.value?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let code, !code.isEmpty, let baseURL, !baseURL.isEmpty {
+                return BridgePairingPayload(baseURL: baseURL, pairCode: code)
+            }
+        }
+
+        let lines = trimmed
+            .split(whereSeparator: \ .isNewline)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        var detectedCode: String?
+        var detectedURL: String?
+        for line in lines {
+            let lower = line.lowercased()
+            if lower.hasPrefix("clawboard://") {
+                return parse(from: line)
+            }
+            if lower.contains("http://") || lower.contains("https://") {
+                detectedURL = line
+            }
+            if lower.hasPrefix("配对码:") || lower.hasPrefix("pair code:") {
+                detectedCode = line.split(separator: ":", maxSplits: 1).last.map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            }
+            if lower.hasPrefix("bridge 地址:") || lower.hasPrefix("bridge url:") || lower.hasPrefix("url:") {
+                detectedURL = line.split(separator: ":", maxSplits: 1).dropFirst().joined(separator: ":").trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+
+        if let detectedCode, let detectedURL, !detectedCode.isEmpty, !detectedURL.isEmpty {
+            return BridgePairingPayload(baseURL: detectedURL, pairCode: detectedCode)
+        }
+
+        return nil
+    }
 }
 
 struct PersistedAppState: Codable {

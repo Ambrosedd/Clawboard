@@ -126,6 +126,10 @@ final class AppViewModel: ObservableObject {
         persistCurrentState()
     }
 
+    func pairWithBridge(payload: BridgePairingPayload) async throws {
+        try await pairWithBridge(baseURL: payload.baseURL, pairCode: payload.pairCode)
+    }
+
     func pairWithBridge(baseURL: String, pairCode: String) async throws {
         let sanitizedBaseURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let sanitizedPairCode = pairCode.trimmingCharacters(in: .whitespacesAndNewlines)

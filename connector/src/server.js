@@ -47,15 +47,30 @@ let stateSourceStatus = {
   schema_version: STATE_FILE ? null : 'seed'
 };
 
+function defaultBridgeBaseURL() {
+  const explicit = process.env.PUBLIC_BASE_URL;
+  if (explicit) return explicit;
+
+  const host = (process.env.PUBLIC_HOST || '127.0.0.1').trim();
+  const protocol = (process.env.PUBLIC_PROTOCOL || 'http').trim();
+  return `${protocol}://${host}:${PORT}`;
+}
+
 function createPairingSession() {
+  const baseURL = defaultBridgeBaseURL();
+  const pairCode = process.env.PAIR_CODE || 'LX-472911';
+  const pairingLink = `clawboard://pair?code=${encodeURIComponent(pairCode)}&url=${encodeURIComponent(baseURL)}`;
+
   return {
     pairing_id: 'pair-001',
-    pair_code: process.env.PAIR_CODE || 'LX-472911',
+    pair_code: pairCode,
     expires_at: isoNowPlusMinutes(10),
     node_id: deviceInfo.id,
     display_name: `${deviceInfo.name} / Clawboard Bridge`,
     bridge_version: VERSION,
-    network_hint: deviceInfo.network_mode
+    network_hint: deviceInfo.network_mode,
+    bridge_url: baseURL,
+    pairing_link: pairingLink
   };
 }
 
