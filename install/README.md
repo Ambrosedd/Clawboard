@@ -15,7 +15,8 @@ bash install-clawboard-bridge.sh
 
 安装脚本当前会：
 - 把 `skills/clawboard-bridge/` 复制到本地安装目录
-- 输出建议的 Bridge 地址与默认配对码
+- 输出可直接发给手机的连接串
+- 保留地址与配对码作为调试兜底
 - 提示下一步去 App 中完成“添加龙虾”
 
 ## 当前定位

@@ -19,10 +19,6 @@ mkdir -p "${INSTALL_ROOT}/skills"
 rm -rf "${TARGET_SKILL_DIR}"
 cp -R "${SKILL_SOURCE_DIR}" "${TARGET_SKILL_DIR}"
 
-cat <<EOF
-
-[OK] 已安装 skill: ${SKILL_NAME}
-
 BRIDGE_HOST="$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'your-server-ip')"
 PAIRING_LINK="clawboard://pair?code=${PAIR_CODE}&url=http://${BRIDGE_HOST}:${BRIDGE_PORT}"
 
