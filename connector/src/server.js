@@ -13,6 +13,7 @@ const PERMISSION_PROFILE = process.env.PERMISSION_PROFILE || 'legacy';
 const PERMISSION_PROFILE_PATH = process.env.PERMISSION_PROFILE_PATH || '';
 const CAPABILITY_LEASES_FILE = process.env.CAPABILITY_LEASES_FILE || '';
 const RESTART_SIGNAL_FILE = process.env.RESTART_SIGNAL_FILE || '';
+const TOKENS_FILE = process.env.TOKENS_FILE || '';
 
 function loadPermissionProfile() {
   if (!PERMISSION_PROFILE_PATH) {
@@ -396,6 +397,20 @@ function markStateInvalid(source, error) {
   });
 }
 
+function persistBridgeState() {
+  if (!STATE_FILE) return;
+  const payload = {
+    schema_version: 'clawboard.bridge.state.v1',
+    generated_at: isoNow(),
+    ...state
+  };
+  const resolved = path.resolve(STATE_FILE);
+  const tmpPath = `${resolved}.tmp`;
+  fs.mkdirSync(path.dirname(resolved), { recursive: true });
+  fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2));
+  fs.renameSync(tmpPath, resolved);
+}
+
 function applyExternalState(nextState, source = 'external_state_file', metadata = {}) {
   state = normalizeState(nextState);
   stateSourceStatus = {
@@ -458,6 +473,33 @@ function isExpired(isoTime) {
   return Date.parse(isoTime) <= Date.now();
 }
 
+function persistTokens() {
+  if (!TOKENS_FILE) return;
+  const payload = {
+    schema_version: 'clawboard.bridge.tokens.v1',
+    updated_at: isoNow(),
+    items: Array.from(issuedTokens.values())
+  };
+  fs.mkdirSync(path.dirname(TOKENS_FILE), { recursive: true });
+  fs.writeFileSync(TOKENS_FILE, JSON.stringify(payload, null, 2));
+}
+
+function loadPersistedTokens() {
+  if (!TOKENS_FILE || !fs.existsSync(TOKENS_FILE)) return;
+  try {
+    const raw = fs.readFileSync(TOKENS_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    const items = Array.isArray(parsed.items) ? parsed.items : [];
+    for (const item of items) {
+      if (item && typeof item.token === 'string' && item.token) {
+        issuedTokens.set(item.token, item);
+      }
+    }
+  } catch (error) {
+    console.warn(`Failed to load TOKENS_FILE ${TOKENS_FILE}: ${error.message}`);
+  }
+}
+
 function issueToken(client = {}) {
   const token = `cb_live_${crypto.randomBytes(12).toString('hex')}`;
   issuedTokens.set(token, {
@@ -470,6 +512,7 @@ function issueToken(client = {}) {
       client_version: client.client_version || '0.1.0'
     }
   });
+  persistTokens();
   return token;
 }
 
@@ -478,6 +521,7 @@ function revokeToken(token) {
   if (!record || record.revoked_at) return false;
   record.revoked_at = isoNow();
   issuedTokens.set(token, record);
+  persistTokens();
   return true;
 }
 
@@ -1247,6 +1291,7 @@ server.listen(PORT, HOST, () => {
     version: VERSION,
     state_source: STATE_FILE ? 'state_file' : 'seed'
   });
+  loadPersistedTokens();
   if (STATE_FILE) {
     startStateFileWatcher(STATE_FILE);
   }

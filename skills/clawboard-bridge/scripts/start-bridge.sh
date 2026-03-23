@@ -6,6 +6,8 @@ CONFIG_FILE="${ROOT_DIR}/config/bridge.env"
 PERMISSION_PROFILE_FILE="${ROOT_DIR}/config/permission-profile.json"
 LEASES_FILE="${ROOT_DIR}/runtime/capability-leases.json"
 RESTART_SIGNAL_FILE="${ROOT_DIR}/runtime/restart-requested.flag"
+STATE_FILE_DEFAULT="${ROOT_DIR}/runtime/runtime-state.json"
+TOKENS_FILE="${ROOT_DIR}/runtime/auth-tokens.json"
 RUNTIME_DIR="${ROOT_DIR}/runtime/connector"
 RUN_DIR="${ROOT_DIR}/run"
 LOG_DIR="${ROOT_DIR}/logs"
@@ -46,9 +48,13 @@ set -a
 source "${CONFIG_FILE}"
 set +a
 
+STATE_FILE="${STATE_FILE:-${STATE_FILE_DEFAULT}}"
+
 PERMISSION_PROFILE_PATH="${PERMISSION_PROFILE_FILE}" \
 CAPABILITY_LEASES_FILE="${LEASES_FILE}" \
 RESTART_SIGNAL_FILE="${RESTART_SIGNAL_FILE}" \
+TOKENS_FILE="${TOKENS_FILE}" \
+STATE_FILE="${STATE_FILE}" \
 node "${RUNTIME_DIR}/src/server.js" >>"${LOG_FILE}" 2>&1 &
 PID=$!
 echo "${PID}" > "${PID_FILE}"

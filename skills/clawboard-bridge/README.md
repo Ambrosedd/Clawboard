@@ -8,6 +8,9 @@
 - `scripts/stop-bridge.sh` — 停止 Bridge
 - `scripts/status-bridge.sh` — 查看运行状态
 - `scripts/install-cloudflared.sh` — 下载 cloudflared 到 skill 自带运行目录
+- `scripts/start-runtime-adapter.sh` — 启动 skill 自带 runtime state adapter
+- `scripts/stop-runtime-adapter.sh` — 停止 runtime state adapter
+- `scripts/status-runtime-adapter.sh` — 查看 runtime state adapter 状态
 - `scripts/start-cloudflare-tunnel.sh` — 启动 Cloudflare Tunnel（HTTPS）
 - `scripts/stop-cloudflare-tunnel.sh` — 停止 Cloudflare Tunnel
 - `scripts/status-cloudflare-tunnel.sh` — 查看 Tunnel 状态
@@ -19,8 +22,11 @@
 - `config/bridge.env` — 本地配置
 - `config/permission-profile.json` — 龙虾权限档位与白名单配置
 - `runtime/connector/` — Bridge 运行时
+- `runtime/runtime-state.json` — runtime adapter 输出的真实状态快照
+- `runtime/auth-tokens.json` — 已签发 token 的持久化文件
 - `runtime/capability-leases.json` — 当前生效中的临时授权租约
 - `runtime/restart-requested.flag` — 受限重启请求标记
+- `runtime/runtime-status.json` — runtime adapter 处理状态
 - `logs/` — 运行日志
 - `run/` — PID 等运行状态
 
@@ -30,8 +36,9 @@
 
 ```bash
 cd ~/.clawboard/skills/clawboard-bridge
-bash scripts/install-cloudflared.sh
+bash scripts/start-runtime-adapter.sh
 bash scripts/start-bridge.sh
+bash scripts/install-cloudflared.sh
 bash scripts/start-cloudflare-tunnel.sh
 bash scripts/show-connection.sh
 ```
