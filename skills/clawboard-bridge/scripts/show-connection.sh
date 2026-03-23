@@ -59,25 +59,30 @@ fi
 if command -v curl >/dev/null 2>&1; then
   SESSION_JSON="$(curl -fsS "${BASE_URL}/pair/session" 2>/dev/null || true)"
   if [ -n "${SESSION_JSON}" ]; then
-    PAIRING_LINK="$(printf '%s' "${SESSION_JSON}" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get("pairing_link") or "")' 2>/dev/null || true)"
     DISPLAY_NAME="$(printf '%s' "${SESSION_JSON}" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get("display_name") or "")' 2>/dev/null || true)"
     EXPIRES_AT="$(printf '%s' "${SESSION_JSON}" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get("expires_at") or "")' 2>/dev/null || true)"
-    BRIDGE_URL="$(printf '%s' "${SESSION_JSON}" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get("bridge_url") or "")' 2>/dev/null || true)"
-    [ -n "${BRIDGE_URL}" ] && BASE_URL="${BRIDGE_URL}"
-    if [ -n "${PAIRING_LINK}" ]; then
-      echo "节点: ${DISPLAY_NAME:-Clawboard Bridge}"
-      echo "Bridge 地址: ${BASE_URL}"
-      [ -n "${EXPIRES_AT}" ] && echo "过期时间: ${EXPIRES_AT}"
-      echo
-      echo "把这段连接串发给手机："
-      echo "${PAIRING_LINK}"
-      exit 0
+    PAIR_CODE_FROM_SESSION="$(printf '%s' "${SESSION_JSON}" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get("pair_code") or "")' 2>/dev/null || true)"
+    [ -n "${PAIR_CODE_FROM_SESSION}" ] && PAIR_CODE="${PAIR_CODE_FROM_SESSION}"
+    ENCODED_URL="$(BASE_URL="${BASE_URL}" python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["BASE_URL"], safe=""))')"
+    ENCODED_CODE="$(PAIR_CODE="${PAIR_CODE}" python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["PAIR_CODE"], safe=""))')"
+    PAIRING_LINK="clawboard://pair?code=${ENCODED_CODE}&url=${ENCODED_URL}"
+    echo "节点: ${DISPLAY_NAME:-Clawboard Bridge}"
+    echo "Bridge 地址: ${BASE_URL}"
+    [ -n "${EXPIRES_AT}" ] && echo "过期时间: ${EXPIRES_AT}"
+    if [ -f "${TUNNEL_URL_FILE}" ]; then
+      echo "连接模式: Cloudflare Tunnel (HTTPS)"
+    else
+      echo "连接模式: Direct"
     fi
+    echo
+    echo "把这段连接串发给手机："
+    echo "${PAIRING_LINK}"
+    exit 0
   fi
 fi
 
-ENCODED_URL="$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["BASE_URL"], safe=""))' BASE_URL="${BASE_URL}")"
-ENCODED_CODE="$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["PAIR_CODE"], safe=""))' PAIR_CODE="${PAIR_CODE}")"
+ENCODED_URL="$(BASE_URL="${BASE_URL}" python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["BASE_URL"], safe=""))')"
+ENCODED_CODE="$(PAIR_CODE="${PAIR_CODE}" python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["PAIR_CODE"], safe=""))')"
 PAIRING_LINK="clawboard://pair?code=${ENCODED_CODE}&url=${ENCODED_URL}"
 
 echo "节点: Clawboard Bridge"
