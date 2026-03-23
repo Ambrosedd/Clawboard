@@ -28,8 +28,9 @@
 1. 在 App 中复制一键安装命令或下载链接，交给龙虾执行
 2. 安装完成后，让龙虾运行 `bash scripts/start-bridge.sh`
 3. 再让龙虾运行 `bash scripts/show-connection.sh` 获取连接串
-4. 在 iPhone App 中进入“设置” → “添加龙虾”
-5. 直接粘贴连接串，或让 App 自动读取剪贴板后连接
+4. 在 iPhone App 中进入“设置” → “添加龙虾 / 安装 Skill”
+5. 可直接复制安装命令、后续命令或完整安装说明发给龙虾
+6. 再把返回的连接串粘贴回 App 完成连接
 
 ## 当前可运行部分
 

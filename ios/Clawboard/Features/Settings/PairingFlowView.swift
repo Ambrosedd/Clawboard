@@ -3,6 +3,8 @@ import UIKit
 
 private let skillBootstrapURL = "https://raw.githubusercontent.com/Ambrosedd/clawboard-install/main/bootstrap-clawboard-bridge.sh"
 private let skillInstallCommand = "curl -fsSL https://raw.githubusercontent.com/Ambrosedd/clawboard-install/main/bootstrap-clawboard-bridge.sh | bash"
+private let skillFollowupCommands = "cd ~/.clawboard/skills/clawboard-bridge\nbash scripts/start-bridge.sh\nbash scripts/show-connection.sh"
+private let skillInstallMessage = "请在你的环境执行下面这条命令安装 Clawboard skill：\n\ncurl -fsSL https://raw.githubusercontent.com/Ambrosedd/clawboard-install/main/bootstrap-clawboard-bridge.sh | bash\n\n安装完成后继续执行：\n\ncd ~/.clawboard/skills/clawboard-bridge\nbash scripts/start-bridge.sh\nbash scripts/show-connection.sh\n\n然后把输出的连接串发回给我。"
 
 private extension BridgePairSession {
     func pairingLink(baseURL: String) -> String {
@@ -86,6 +88,32 @@ struct PairingFlowView: View {
                     Button("复制安装命令") {
                         UIPasteboard.general.string = skillInstallCommand
                         viewModel.toastMessage = "已复制安装命令"
+                    }
+
+                    Text("安装后的后续命令")
+                        .font(.caption.weight(.semibold))
+                        .padding(.top, 8)
+                    Text(skillFollowupCommands)
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                        .foregroundStyle(.secondary)
+
+                    Button("复制后续命令") {
+                        UIPasteboard.general.string = skillFollowupCommands
+                        viewModel.toastMessage = "已复制后续命令"
+                    }
+
+                    Text("可直接转发给龙虾的话术")
+                        .font(.caption.weight(.semibold))
+                        .padding(.top, 8)
+                    Text(skillInstallMessage)
+                        .font(.caption)
+                        .textSelection(.enabled)
+                        .foregroundStyle(.secondary)
+
+                    Button("复制完整安装说明") {
+                        UIPasteboard.general.string = skillInstallMessage
+                        viewModel.toastMessage = "已复制完整安装说明"
                     }
                 }
 

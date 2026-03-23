@@ -7,7 +7,7 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 Section("连接") {
-                    NavigationLink("添加龙虾") {
+                    NavigationLink("添加龙虾 / 安装 Skill") {
                         PairingFlowView()
                     }
 
