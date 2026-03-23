@@ -661,6 +661,24 @@ function persistCapabilityLeases() {
   fs.writeFileSync(CAPABILITY_LEASES_FILE, JSON.stringify(payload, null, 2));
 }
 
+function loadPersistedCapabilityLeases() {
+  if (!CAPABILITY_LEASES_FILE || !fs.existsSync(CAPABILITY_LEASES_FILE)) return;
+  try {
+    const raw = fs.readFileSync(CAPABILITY_LEASES_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    const items = Array.isArray(parsed.items) ? parsed.items : [];
+    capabilityLeases.length = 0;
+    for (const item of items) {
+      if (item && typeof item.id === 'string' && typeof item.expires_at === 'string' && Date.parse(item.expires_at) > Date.now()) {
+        capabilityLeases.push(item);
+      }
+    }
+    persistCapabilityLeases();
+  } catch (error) {
+    console.warn(`Failed to load CAPABILITY_LEASES_FILE ${CAPABILITY_LEASES_FILE}: ${error.message}`);
+  }
+}
+
 function currentCapabilityLeases() {
   const now = Date.now();
   const active = capabilityLeases.filter(lease => Date.parse(lease.expires_at) > now);
@@ -1292,6 +1310,7 @@ server.listen(PORT, HOST, () => {
     state_source: STATE_FILE ? 'state_file' : 'seed'
   });
   loadPersistedTokens();
+  loadPersistedCapabilityLeases();
   if (STATE_FILE) {
     startStateFileWatcher(STATE_FILE);
   }
