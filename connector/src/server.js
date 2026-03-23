@@ -38,6 +38,14 @@ if (API_TOKEN) {
 let state = createSeedState(deviceInfo.id);
 let stateFileWatcher = null;
 let stateReloadTimer = null;
+let stateSourceStatus = {
+  mode: STATE_FILE ? 'state_file' : 'seed',
+  valid: true,
+  last_loaded_at: STATE_FILE ? null : isoNow(),
+  last_error: null,
+  last_error_at: null,
+  schema_version: STATE_FILE ? null : 'seed'
+};
 
 function createPairingSession() {
   return {
@@ -148,6 +156,89 @@ function createSeedState(nodeId) {
   });
 }
 
+function isObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isISODateTime(value) {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value));
+}
+
+function validateBridgeState(input) {
+  const errors = [];
+
+  if (!isObject(input)) {
+    return ['root must be an object'];
+  }
+
+  if (input.schema_version !== 'clawboard.bridge.state.v1') {
+    errors.push('schema_version must equal clawboard.bridge.state.v1');
+  }
+  if (!isISODateTime(input.generated_at)) {
+    errors.push('generated_at must be a valid ISO date-time string');
+  }
+
+  const listFields = ['lobsters', 'tasks', 'approvals', 'alerts'];
+  for (const field of listFields) {
+    if (!Array.isArray(input[field])) {
+      errors.push(`${field} must be an array`);
+    }
+  }
+
+  if (Array.isArray(input.lobsters)) {
+    input.lobsters.forEach((item, index) => {
+      if (!isObject(item)) return errors.push(`lobsters[${index}] must be an object`);
+      for (const key of ['id', 'name', 'status', 'risk_level', 'node_id']) {
+        if (typeof item[key] !== 'string' || !item[key]) errors.push(`lobsters[${index}].${key} must be a non-empty string`);
+      }
+      if (!isISODateTime(item.last_active_at)) errors.push(`lobsters[${index}].last_active_at must be ISO date-time`);
+      if (!Array.isArray(item.recent_logs) || !item.recent_logs.every(v => typeof v === 'string')) errors.push(`lobsters[${index}].recent_logs must be string array`);
+    });
+  }
+
+  if (Array.isArray(input.tasks)) {
+    input.tasks.forEach((item, index) => {
+      if (!isObject(item)) return errors.push(`tasks[${index}] must be an object`);
+      for (const key of ['id', 'title', 'status', 'lobster_id', 'current_step', 'risk_level']) {
+        if (typeof item[key] !== 'string' || !item[key]) errors.push(`tasks[${index}].${key} must be a non-empty string`);
+      }
+      if (typeof item.progress !== 'number') errors.push(`tasks[${index}].progress must be a number`);
+      if (typeof item.risk_score !== 'number') errors.push(`tasks[${index}].risk_score must be a number`);
+      if (!Array.isArray(item.timeline)) {
+        errors.push(`tasks[${index}].timeline must be an array`);
+      } else {
+        item.timeline.forEach((step, stepIndex) => {
+          if (!isObject(step)) return errors.push(`tasks[${index}].timeline[${stepIndex}] must be an object`);
+          if (typeof step.step !== 'string' || !step.step) errors.push(`tasks[${index}].timeline[${stepIndex}].step must be string`);
+          if (typeof step.status !== 'string' || !step.status) errors.push(`tasks[${index}].timeline[${stepIndex}].status must be string`);
+        });
+      }
+    });
+  }
+
+  if (Array.isArray(input.approvals)) {
+    input.approvals.forEach((item, index) => {
+      if (!isObject(item)) return errors.push(`approvals[${index}] must be an object`);
+      for (const key of ['id', 'task_id', 'lobster_id', 'title', 'reason', 'scope', 'risk_level', 'status']) {
+        if (typeof item[key] !== 'string' || !item[key]) errors.push(`approvals[${index}].${key} must be a non-empty string`);
+      }
+      if (!isISODateTime(item.expires_at)) errors.push(`approvals[${index}].expires_at must be ISO date-time`);
+      if (item.resolved_at != null && !isISODateTime(item.resolved_at)) errors.push(`approvals[${index}].resolved_at must be null or ISO date-time`);
+    });
+  }
+
+  if (Array.isArray(input.alerts)) {
+    input.alerts.forEach((item, index) => {
+      if (!isObject(item)) return errors.push(`alerts[${index}] must be an object`);
+      for (const key of ['id', 'level', 'title', 'summary']) {
+        if (typeof item[key] !== 'string' || !item[key]) errors.push(`alerts[${index}].${key} must be a non-empty string`);
+      }
+    });
+  }
+
+  return errors;
+}
+
 function normalizeState(input = {}) {
   return {
     lobsters: Array.isArray(input.lobsters) ? input.lobsters.map(item => ({
@@ -202,13 +293,51 @@ function loadStateFromFile(filePath) {
   const resolvedPath = path.resolve(filePath);
   const raw = fs.readFileSync(resolvedPath, 'utf8');
   const parsed = JSON.parse(raw);
-  return normalizeState(parsed);
+  const errors = validateBridgeState(parsed);
+  if (errors.length > 0) {
+    const error = new Error(errors.join('; '));
+    error.code = 'invalid_state_schema';
+    error.validationErrors = errors;
+    throw error;
+  }
+  return {
+    normalized: normalizeState(parsed),
+    schema_version: parsed.schema_version,
+    generated_at: parsed.generated_at,
+    source: resolvedPath
+  };
 }
 
-function applyExternalState(nextState, source = 'external_state_file') {
+function markStateInvalid(source, error) {
+  stateSourceStatus = {
+    ...stateSourceStatus,
+    mode: 'state_file',
+    valid: false,
+    last_error: error.message || String(error),
+    last_error_at: isoNow()
+  };
+
+  publishEvent('runtime.state.invalid', {
+    source,
+    message: error.message || String(error),
+    validation_errors: Array.isArray(error.validationErrors) ? error.validationErrors.slice(0, 20) : []
+  });
+}
+
+function applyExternalState(nextState, source = 'external_state_file', metadata = {}) {
   state = normalizeState(nextState);
+  stateSourceStatus = {
+    mode: 'state_file',
+    valid: true,
+    last_loaded_at: isoNow(),
+    last_error: null,
+    last_error_at: null,
+    schema_version: metadata.schema_version || 'clawboard.bridge.state.v1'
+  };
   publishEvent('runtime.state.reloaded', {
     source,
+    generated_at: metadata.generated_at || null,
+    schema_version: metadata.schema_version || null,
     lobsters: state.lobsters.length,
     tasks: state.tasks.length,
     approvals: state.approvals.filter(item => item.status === 'pending').length,
@@ -221,9 +350,10 @@ function startStateFileWatcher(filePath) {
 
   try {
     const initialState = loadStateFromFile(resolvedPath);
-    applyExternalState(initialState, resolvedPath);
+    applyExternalState(initialState.normalized, resolvedPath, initialState);
   } catch (error) {
     console.error(`Failed to load STATE_FILE ${resolvedPath}:`, error.message);
+    markStateInvalid(resolvedPath, error);
   }
 
   stateFileWatcher = fs.watch(resolvedPath, { persistent: false }, () => {
@@ -231,9 +361,10 @@ function startStateFileWatcher(filePath) {
     stateReloadTimer = setTimeout(() => {
       try {
         const nextState = loadStateFromFile(resolvedPath);
-        applyExternalState(nextState, resolvedPath);
+        applyExternalState(nextState.normalized, resolvedPath, nextState);
       } catch (error) {
         console.error(`Failed to reload STATE_FILE ${resolvedPath}:`, error.message);
+        markStateInvalid(resolvedPath, error);
       }
     }, 150);
   });
@@ -480,10 +611,11 @@ async function handler(req, res) {
 
   if (req.method === 'GET' && pathname === '/health') {
     return sendJson(res, 200, {
-      status: 'ok',
+      status: stateSourceStatus.valid ? 'ok' : 'degraded',
       version: VERSION,
       time: isoNow(),
-      state_source: STATE_FILE ? 'state_file' : 'seed'
+      state_source: STATE_FILE ? 'state_file' : 'seed',
+      state_status: stateSourceStatus
     });
   }
 
@@ -521,7 +653,10 @@ async function handler(req, res) {
   }
 
   if (req.method === 'GET' && pathname === '/device/info') {
-    return sendJson(res, 200, deviceInfo);
+    return sendJson(res, 200, {
+      ...deviceInfo,
+      state_status: stateSourceStatus
+    });
   }
 
   if (req.method === 'GET' && pathname === '/auth/session') {

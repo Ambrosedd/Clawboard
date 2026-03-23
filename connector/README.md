@@ -70,6 +70,7 @@
 - `pair.exchanged`
 - `auth.revoked`
 - `runtime.state.reloaded`
+- `runtime.state.invalid`
 - `lobster.status.changed`
 - `task.progress.updated`
 - `task.failed`
@@ -90,7 +91,9 @@ STATE_FILE=./sample-runtime-state.json node src/server.js
 - Bridge 启动时读取该文件
 - 文件变化时自动热重载
 - 对外 API 结构保持不变
-- 会发出 `runtime.state.reloaded` 事件
+- 有效状态会发出 `runtime.state.reloaded` 事件
+- 非法状态会保留上一份有效状态，并发出 `runtime.state.invalid` 事件
+- `/health` 会显示当前 state 校验状态
 
 这样可以把“真实运行态采集”与“对 App 暴露稳定 API / 鉴权 / 配对 / SSE”解耦。
 
@@ -113,6 +116,7 @@ STATE_FILE=./sample-runtime-state.generated.json node src/server.js
 这条链适合当前阶段验证：
 - runtime / skill 输出事件
 - adapter 聚合为标准快照
+- bridge 校验 schema、保留最后有效状态
 - bridge 负责对 App 暴露统一 API
 
 ## 运行

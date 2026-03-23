@@ -127,6 +127,17 @@ Bridge 应优先维持 App-facing API 稳定，
 
 ---
 
+## ## 校验与错误处理
+
+当前 Bridge 在读取 `STATE_FILE` 时会做基础 schema 校验：
+- 校验通过：加载新状态，发 `runtime.state.reloaded`
+- 校验失败：保留上一份有效状态，发 `runtime.state.invalid`
+- `/health` 中可看到 `state_status`
+
+这意味着 adapter 接错格式时，不会默默把 Bridge 状态污染掉。
+
+---
+
 ## 当前结论
 
 `STATE_FILE` 的意义不是权宜之计，而是一个重要边界：

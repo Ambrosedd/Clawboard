@@ -246,6 +246,8 @@ Authorization: Bearer <token>
 - `bridge.started`
 - `pair.exchanged`
 - `auth.revoked`
+- `runtime.state.reloaded`
+- `runtime.state.invalid`
 - `lobster.status.changed`
 - `task.progress.updated`
 - `task.waiting_approval`
@@ -259,6 +261,8 @@ Authorization: Bearer <token>
 - `bridge.started`
 - `pair.exchanged`
 - `auth.revoked`
+- `runtime.state.reloaded`
+- `runtime.state.invalid`
 - `lobster.status.changed`
 - `task.progress.updated`
 - `task.failed`
