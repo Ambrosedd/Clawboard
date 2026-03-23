@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_FILE="${ROOT_DIR}/config/bridge.env"
+TUNNEL_URL_FILE="${ROOT_DIR}/run/cloudflare-tunnel.url"
 
 if [ -f "${CONFIG_FILE}" ]; then
   set -a
@@ -48,6 +49,13 @@ PUBLIC_PROTOCOL="${PUBLIC_PROTOCOL:-http}"
 PUBLIC_HOST="$(detect_public_host)"
 BASE_URL="${PUBLIC_BASE_URL:-${PUBLIC_PROTOCOL}://${PUBLIC_HOST}:${PORT}}"
 
+if [ -f "${TUNNEL_URL_FILE}" ]; then
+  TUNNEL_URL="$(cat "${TUNNEL_URL_FILE}")"
+  if [ -n "${TUNNEL_URL}" ]; then
+    BASE_URL="${TUNNEL_URL}"
+  fi
+fi
+
 if command -v curl >/dev/null 2>&1; then
   SESSION_JSON="$(curl -fsS "${BASE_URL}/pair/session" 2>/dev/null || true)"
   if [ -n "${SESSION_JSON}" ]; then
@@ -74,6 +82,11 @@ PAIRING_LINK="clawboard://pair?code=${ENCODED_CODE}&url=${ENCODED_URL}"
 
 echo "节点: Clawboard Bridge"
 echo "Bridge 地址: ${BASE_URL}"
+if [ -f "${TUNNEL_URL_FILE}" ]; then
+  echo "连接模式: Cloudflare Tunnel (HTTPS)"
+else
+  echo "连接模式: Direct"
+fi
 echo
 echo "把这段连接串发给手机："
 echo "${PAIRING_LINK}"

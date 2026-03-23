@@ -41,9 +41,11 @@ cat <<EOF
    cd ${TARGET_SKILL_DIR}
 2. 启动 bridge：
    bash scripts/start-bridge.sh
-3. 查看连接串：
+3. 如需公网 HTTPS 连接，启动 tunnel：
+   bash scripts/start-cloudflare-tunnel.sh
+4. 查看连接串：
    bash scripts/show-connection.sh
-4. 在 Clawboard App → 设置 → 添加龙虾 中直接粘贴（App 也会尝试自动读取剪贴板）
+5. 在 Clawboard App → 设置 → 添加龙虾 中直接粘贴（App 也会尝试自动读取剪贴板）
 
 预设连接串（bridge 启动后也会以运行中的真实 session 为准）：
    ${PAIRING_LINK}

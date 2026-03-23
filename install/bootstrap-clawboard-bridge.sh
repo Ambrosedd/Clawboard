@@ -99,6 +99,8 @@ echo "[OK] Bootstrap 安装完成"
 echo "接下来建议："
 echo "  cd ${TARGET_DIR}"
 echo "  bash scripts/start-bridge.sh"
+echo "  # 如需公网 HTTPS 连接，再运行："
+echo "  bash scripts/start-cloudflare-tunnel.sh"
 echo "  bash scripts/show-connection.sh"
 echo
 echo "默认会优先使用可访问地址生成连接串："

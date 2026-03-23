@@ -7,7 +7,10 @@
 - `scripts/start-bridge.sh` — 启动 Bridge
 - `scripts/stop-bridge.sh` — 停止 Bridge
 - `scripts/status-bridge.sh` — 查看运行状态
-- `scripts/show-connection.sh` — 查看可发给手机的连接串
+- `scripts/start-cloudflare-tunnel.sh` — 启动 Cloudflare Tunnel（HTTPS）
+- `scripts/stop-cloudflare-tunnel.sh` — 停止 Cloudflare Tunnel
+- `scripts/status-cloudflare-tunnel.sh` — 查看 Tunnel 状态
+- `scripts/show-connection.sh` — 查看可发给手机的连接串（优先 HTTPS）
 - `scripts/restart-lobster.sh` — 手动写入受限重启请求
 
 ## 目录约定
@@ -22,12 +25,15 @@
 
 ## 推荐使用方式
 
-安装完成后：
+安装完成后，推荐公网连接路径：
 
 ```bash
 cd ~/.clawboard/skills/clawboard-bridge
 bash scripts/start-bridge.sh
+bash scripts/start-cloudflare-tunnel.sh
 bash scripts/show-connection.sh
 ```
 
-然后把输出的连接串发给手机，在 Clawboard App 里“添加龙虾”。
+然后把输出的 HTTPS 连接串发给手机，在 Clawboard App 里“添加龙虾”。
+
+如果只是同局域网内调试，也可以不启 tunnel，直接使用本地/局域网地址。

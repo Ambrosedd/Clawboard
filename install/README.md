@@ -30,11 +30,12 @@ curl -fsSL https://raw.githubusercontent.com/Ambrosedd/Clawboard/main/install/bo
 https://raw.githubusercontent.com/Ambrosedd/Clawboard/main/install/bootstrap-clawboard-bridge.sh
 ```
 
-安装完成后：
+安装完成后，若希望手机通过公网稳定连接，推荐直接走 HTTPS tunnel：
 
 ```bash
 cd ~/.clawboard/skills/clawboard-bridge
 bash scripts/start-bridge.sh
+bash scripts/start-cloudflare-tunnel.sh
 bash scripts/show-connection.sh
 ```
 
@@ -43,7 +44,8 @@ bash scripts/show-connection.sh
 - 同时复制 `connector/` 运行时到 skill bundle 内
 - 生成默认配置、日志目录、运行目录
 - 提供 `start-bridge.sh / stop-bridge.sh / status-bridge.sh / show-connection.sh`
-- 输出可直接发给手机的连接串
+- 提供 `start-cloudflare-tunnel.sh / stop-cloudflare-tunnel.sh / status-cloudflare-tunnel.sh`
+- 优先输出可直接发给手机的 HTTPS 连接串
 
 ## 当前定位
 
