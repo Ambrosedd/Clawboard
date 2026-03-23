@@ -7,6 +7,7 @@
 - `scripts/start-bridge.sh` — 启动 Bridge
 - `scripts/stop-bridge.sh` — 停止 Bridge
 - `scripts/status-bridge.sh` — 查看运行状态
+- `scripts/install-cloudflared.sh` — 下载 cloudflared 到 skill 自带运行目录
 - `scripts/start-cloudflare-tunnel.sh` — 启动 Cloudflare Tunnel（HTTPS）
 - `scripts/stop-cloudflare-tunnel.sh` — 停止 Cloudflare Tunnel
 - `scripts/status-cloudflare-tunnel.sh` — 查看 Tunnel 状态
@@ -29,6 +30,7 @@
 
 ```bash
 cd ~/.clawboard/skills/clawboard-bridge
+bash scripts/install-cloudflared.sh
 bash scripts/start-bridge.sh
 bash scripts/start-cloudflare-tunnel.sh
 bash scripts/show-connection.sh

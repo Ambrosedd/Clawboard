@@ -41,7 +41,8 @@ cat <<EOF
    cd ${TARGET_SKILL_DIR}
 2. 启动 bridge：
    bash scripts/start-bridge.sh
-3. 如需公网 HTTPS 连接，启动 tunnel：
+3. 如需公网 HTTPS 连接，先安装并启动 tunnel：
+   bash scripts/install-cloudflared.sh
    bash scripts/start-cloudflare-tunnel.sh
 4. 查看连接串：
    bash scripts/show-connection.sh

@@ -100,6 +100,7 @@ echo "接下来建议："
 echo "  cd ${TARGET_DIR}"
 echo "  bash scripts/start-bridge.sh"
 echo "  # 如需公网 HTTPS 连接，再运行："
+echo "  bash scripts/install-cloudflared.sh"
 echo "  bash scripts/start-cloudflare-tunnel.sh"
 echo "  bash scripts/show-connection.sh"
 echo

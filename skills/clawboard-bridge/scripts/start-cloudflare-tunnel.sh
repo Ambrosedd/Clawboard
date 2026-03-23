@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_FILE="${ROOT_DIR}/config/bridge.env"
+BIN_DIR="${ROOT_DIR}/runtime/bin"
+BUNDLED_CLOUDFLARED="${BIN_DIR}/cloudflared"
 RUN_DIR="${ROOT_DIR}/run"
 LOG_DIR="${ROOT_DIR}/logs"
 PID_FILE="${RUN_DIR}/cloudflare-tunnel.pid"
@@ -20,12 +22,20 @@ fi
 PORT="${PORT:-8787}"
 TUNNEL_LOCAL_URL="${TUNNEL_LOCAL_URL:-http://127.0.0.1:${PORT}}"
 
-if ! command -v cloudflared >/dev/null 2>&1; then
+CLOUDFLARED_BIN=""
+if [ -x "${BUNDLED_CLOUDFLARED}" ]; then
+  CLOUDFLARED_BIN="${BUNDLED_CLOUDFLARED}"
+elif command -v cloudflared >/dev/null 2>&1; then
+  CLOUDFLARED_BIN="$(command -v cloudflared)"
+fi
+
+if [ -z "${CLOUDFLARED_BIN}" ]; then
   echo "[ERROR] 未检测到 cloudflared。"
-  echo "安装方式参考：https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
-  echo "例如 Ubuntu/Debian 可用："
-  echo "  wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb"
-  echo "  sudo dpkg -i cloudflared-linux-amd64.deb"
+  echo "优先使用 skill 内自带路径: ${BUNDLED_CLOUDFLARED}"
+  echo "你可以直接运行："
+  echo "  bash ${ROOT_DIR}/scripts/install-cloudflared.sh"
+  echo "或参考官方安装方式："
+  echo "  https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
   exit 1
 fi
 
@@ -41,7 +51,7 @@ fi
 
 rm -f "${URL_FILE}"
 : > "${LOG_FILE}"
-cloudflared tunnel --no-autoupdate --url "${TUNNEL_LOCAL_URL}" >"${LOG_FILE}" 2>&1 &
+"${CLOUDFLARED_BIN}" tunnel --no-autoupdate --url "${TUNNEL_LOCAL_URL}" >"${LOG_FILE}" 2>&1 &
 PID=$!
 echo "${PID}" > "${PID_FILE}"
 

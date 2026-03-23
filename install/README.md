@@ -34,6 +34,7 @@ https://raw.githubusercontent.com/Ambrosedd/Clawboard/main/install/bootstrap-cla
 
 ```bash
 cd ~/.clawboard/skills/clawboard-bridge
+bash scripts/install-cloudflared.sh
 bash scripts/start-bridge.sh
 bash scripts/start-cloudflare-tunnel.sh
 bash scripts/show-connection.sh
@@ -44,7 +45,8 @@ bash scripts/show-connection.sh
 - 同时复制 `connector/` 运行时到 skill bundle 内
 - 生成默认配置、日志目录、运行目录
 - 提供 `start-bridge.sh / stop-bridge.sh / status-bridge.sh / show-connection.sh`
-- 提供 `start-cloudflare-tunnel.sh / stop-cloudflare-tunnel.sh / status-cloudflare-tunnel.sh`
+- 提供 `install-cloudflared.sh / start-cloudflare-tunnel.sh / stop-cloudflare-tunnel.sh / status-cloudflare-tunnel.sh`
+- Cloudflare Tunnel 可安装到 skill 自带运行目录 `runtime/bin/`
 - 优先输出可直接发给手机的 HTTPS 连接串
 
 ## 当前定位
