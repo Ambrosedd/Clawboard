@@ -49,6 +49,42 @@ final class ConnectorClient {
         try validate(response: response, data: data)
     }
 
+    func approve(_ approval: ApprovalItem, on bridgeConnection: BridgeConnection, grantedScope: String? = nil, durationMinutes: Int = 30) async throws {
+        let payload = BridgeApproveRequest(grantedScope: grantedScope ?? approval.scope, durationMinutes: durationMinutes)
+        try await sendAuthorized(
+            bridgeConnection,
+            path: "/approvals/\(approval.id)/approve",
+            method: "POST",
+            body: payload
+        )
+    }
+
+    func reject(_ approval: ApprovalItem, on bridgeConnection: BridgeConnection, reason: String = "rejected_by_operator") async throws {
+        let payload = BridgeRejectRequest(reason: reason)
+        try await sendAuthorized(
+            bridgeConnection,
+            path: "/approvals/\(approval.id)/reject",
+            method: "POST",
+            body: payload
+        )
+    }
+
+    func pause(task: TaskSummary, on bridgeConnection: BridgeConnection) async throws {
+        try await sendTaskControl(path: "/lobsters/\(task.lobsterID)/pause", on: bridgeConnection)
+    }
+
+    func resume(task: TaskSummary, on bridgeConnection: BridgeConnection) async throws {
+        try await sendTaskControl(path: "/lobsters/\(task.lobsterID)/resume", on: bridgeConnection)
+    }
+
+    func terminate(task: TaskSummary, on bridgeConnection: BridgeConnection) async throws {
+        try await sendTaskControl(path: "/lobsters/\(task.lobsterID)/terminate", on: bridgeConnection)
+    }
+
+    func retry(task: TaskSummary, on bridgeConnection: BridgeConnection) async throws {
+        try await sendTaskControl(path: "/tasks/\(task.id)/retry", on: bridgeConnection)
+    }
+
     private func fetchSnapshotFromBridge(_ bridgeConnection: BridgeConnection) async throws -> AppSnapshot {
         async let lobstersResponse: LobsterListResponse = fetchAuthorized(bridgeConnection, path: "/lobsters")
         async let tasksResponse: TaskListResponse = fetchAuthorized(bridgeConnection, path: "/tasks")
@@ -127,6 +163,24 @@ final class ConnectorClient {
         let (data, response) = try await session.data(for: request)
         try validate(response: response, data: data)
         return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    private func sendAuthorized<T: Encodable>(_ bridgeConnection: BridgeConnection, path: String, method: String, body: T) async throws {
+        var request = try makeRequest(baseURL: bridgeConnection.baseURL, path: path)
+        request.httpMethod = method
+        request.addValue("Bearer \(bridgeConnection.token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+        let (data, response) = try await session.data(for: request)
+        try validate(response: response, data: data)
+    }
+
+    private func sendTaskControl(path: String, on bridgeConnection: BridgeConnection) async throws {
+        var request = try makeRequest(baseURL: bridgeConnection.baseURL, path: path)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(bridgeConnection.token)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await session.data(for: request)
+        try validate(response: response, data: data)
     }
 
     private func makeRequest(baseURL: String, path: String) throws -> URLRequest {
@@ -300,4 +354,18 @@ private struct BridgeDeviceInfo: Decodable {
     let id: String
     let name: String
     let platform: String
+}
+
+private struct BridgeApproveRequest: Encodable {
+    let grantedScope: String
+    let durationMinutes: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case grantedScope = "granted_scope"
+        case durationMinutes = "duration_minutes"
+    }
+}
+
+private struct BridgeRejectRequest: Encodable {
+    let reason: String
 }

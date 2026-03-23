@@ -21,6 +21,9 @@ struct SettingsView: View {
                             Text("配对时间：\(bridge.pairedAt.formatted(date: .omitted, time: .shortened))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                            Text("当前已启用真实 Bridge 拉取与控制闭环：审批、暂停、恢复、终止、重试都会直接调用服务端接口。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
 
                         Button("断开 Bridge 连接") {

@@ -175,7 +175,18 @@ final class AppViewModel: ObservableObject {
         }
     }
 
-    func approve(_ approval: ApprovalItem) {
+    func approve(_ approval: ApprovalItem) async {
+        if let bridgeConnection {
+            do {
+                try await client.approve(approval, on: bridgeConnection)
+                toastMessage = "已批准：\(approval.title)"
+                await refresh()
+            } catch {
+                toastMessage = "批准失败：\(error.localizedDescription)"
+            }
+            return
+        }
+
         approvals.removeAll { $0.id == approval.id }
         alerts.removeAll { $0.relatedTaskID == approval.taskID }
 
@@ -197,7 +208,18 @@ final class AppViewModel: ObservableObject {
         toastMessage = "已批准：\(approval.title)"
     }
 
-    func reject(_ approval: ApprovalItem) {
+    func reject(_ approval: ApprovalItem) async {
+        if let bridgeConnection {
+            do {
+                try await client.reject(approval, on: bridgeConnection)
+                toastMessage = "已拒绝：\(approval.title)"
+                await refresh()
+            } catch {
+                toastMessage = "拒绝失败：\(error.localizedDescription)"
+            }
+            return
+        }
+
         approvals.removeAll { $0.id == approval.id }
         alerts.removeAll { $0.relatedTaskID == approval.taskID }
 
@@ -223,7 +245,18 @@ final class AppViewModel: ObservableObject {
         persistCurrentState()
     }
 
-    func pauseTask(_ task: TaskSummary) {
+    func pauseTask(_ task: TaskSummary) async {
+        if let bridgeConnection {
+            do {
+                try await client.pause(task: task, on: bridgeConnection)
+                toastMessage = "已暂停任务：\(task.title)"
+                await refresh()
+            } catch {
+                toastMessage = "暂停失败：\(error.localizedDescription)"
+            }
+            return
+        }
+
         updateTask(id: task.id) { current in
             current.status = "paused"
             current.currentStep = "等待恢复"
@@ -233,7 +266,18 @@ final class AppViewModel: ObservableObject {
         toastMessage = "已暂停任务：\(task.title)"
     }
 
-    func resumeTask(_ task: TaskSummary) {
+    func resumeTask(_ task: TaskSummary) async {
+        if let bridgeConnection {
+            do {
+                try await client.resume(task: task, on: bridgeConnection)
+                toastMessage = "已恢复任务：\(task.title)"
+                await refresh()
+            } catch {
+                toastMessage = "恢复失败：\(error.localizedDescription)"
+            }
+            return
+        }
+
         updateTask(id: task.id) { current in
             current.status = current.progress >= 100 ? "completed" : "running"
             current.currentStep = "继续执行"
@@ -243,7 +287,18 @@ final class AppViewModel: ObservableObject {
         toastMessage = "已恢复任务：\(task.title)"
     }
 
-    func terminateTask(_ task: TaskSummary) {
+    func terminateTask(_ task: TaskSummary) async {
+        if let bridgeConnection {
+            do {
+                try await client.terminate(task: task, on: bridgeConnection)
+                toastMessage = "已发送终止指令：\(task.title)"
+                await refresh()
+            } catch {
+                toastMessage = "终止失败：\(error.localizedDescription)"
+            }
+            return
+        }
+
         updateTask(id: task.id) { current in
             current.status = "terminated"
             current.currentStep = "任务已终止"
@@ -253,6 +308,28 @@ final class AppViewModel: ObservableObject {
         syncLobster(withTaskID: task.id, statusOverride: "异常")
         persistCurrentState()
         toastMessage = "已发送终止指令：\(task.title)"
+    }
+
+    func retryTask(_ task: TaskSummary) async {
+        if let bridgeConnection {
+            do {
+                try await client.retry(task: task, on: bridgeConnection)
+                toastMessage = "已重试任务：\(task.title)"
+                await refresh()
+            } catch {
+                toastMessage = "重试失败：\(error.localizedDescription)"
+            }
+            return
+        }
+
+        updateTask(id: task.id) { current in
+            current.status = "running"
+            current.currentStep = "重新规划并继续执行"
+            current.progress = min(current.progress, 60)
+        }
+        syncLobster(withTaskID: task.id, statusOverride: "运行中")
+        persistCurrentState()
+        toastMessage = "已重试任务：\(task.title)"
     }
 
     func resetDemoState() {

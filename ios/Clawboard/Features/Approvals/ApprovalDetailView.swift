@@ -28,19 +28,22 @@ struct ApprovalDetailView: View {
 
             Section {
                 Button("批准") {
-                    viewModel.approve(approval)
-                    dismiss()
+                    Task {
+                        await viewModel.approve(approval)
+                        dismiss()
+                    }
                 }
                 .buttonStyle(.borderedProminent)
 
                 Button("缩小范围") {
-                    viewModel.toastMessage = "已记录缩小范围请求：\(approval.title)"
-                    dismiss()
+                    viewModel.toastMessage = "缩小范围审批还未接入独立服务端参数，当前先保留为 UI 占位。"
                 }
 
                 Button("拒绝", role: .destructive) {
-                    viewModel.reject(approval)
-                    dismiss()
+                    Task {
+                        await viewModel.reject(approval)
+                        dismiss()
+                    }
                 }
             }
         }

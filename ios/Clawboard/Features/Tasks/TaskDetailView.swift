@@ -71,12 +71,12 @@ struct TaskDetailView: View {
                 if let approval = relatedApproval {
                     HStack {
                         Button("批准") {
-                            viewModel.approve(approval)
+                            Task { await viewModel.approve(approval) }
                         }
                         .buttonStyle(.borderedProminent)
 
                         Button("拒绝") {
-                            viewModel.reject(approval)
+                            Task { await viewModel.reject(approval) }
                         }
                         .buttonStyle(.bordered)
                     }
@@ -85,19 +85,24 @@ struct TaskDetailView: View {
                 HStack {
                     if currentTask.status == "paused" {
                         Button("恢复任务") {
-                            viewModel.resumeTask(currentTask)
+                            Task { await viewModel.resumeTask(currentTask) }
                         }
                         .buttonStyle(.borderedProminent)
-                    } else if currentTask.status != "terminated" && currentTask.status != "completed" {
+                    } else if currentTask.status == "failed" || currentTask.status == "terminated" {
+                        Button("重试任务") {
+                            Task { await viewModel.retryTask(currentTask) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else if currentTask.status != "completed" {
                         Button("暂停任务") {
-                            viewModel.pauseTask(currentTask)
+                            Task { await viewModel.pauseTask(currentTask) }
                         }
                         .buttonStyle(.bordered)
                     }
 
-                    if currentTask.status != "terminated" {
+                    if currentTask.status != "terminated" && currentTask.status != "completed" {
                         Button("终止", role: .destructive) {
-                            viewModel.terminateTask(currentTask)
+                            Task { await viewModel.terminateTask(currentTask) }
                         }
                         .buttonStyle(.bordered)
                     }

@@ -59,16 +59,22 @@ struct LobsterDetailView: View {
                 if let task = relatedTasks.first {
                     if task.status == "paused" {
                         Button("恢复") {
-                            viewModel.resumeTask(task)
+                            Task { await viewModel.resumeTask(task) }
                         }
-                    } else {
+                    } else if task.status == "failed" || task.status == "terminated" {
+                        Button("重试") {
+                            Task { await viewModel.retryTask(task) }
+                        }
+                    } else if task.status != "completed" {
                         Button("暂停") {
-                            viewModel.pauseTask(task)
+                            Task { await viewModel.pauseTask(task) }
                         }
                     }
 
-                    Button("终止", role: .destructive) {
-                        viewModel.terminateTask(task)
+                    if task.status != "terminated" && task.status != "completed" {
+                        Button("终止", role: .destructive) {
+                            Task { await viewModel.terminateTask(task) }
+                        }
                     }
                 } else {
                     Text("当前没有可操作的活跃任务")
