@@ -59,6 +59,19 @@
 ### 告警
 - `GET /alerts`
 
+### 实时事件流
+- `GET /stream/events`（SSE）
+
+当前会推送的代表性事件包括：
+- `bridge.started`
+- `pair.exchanged`
+- `auth.revoked`
+- `lobster.status.changed`
+- `task.progress.updated`
+- `task.failed`
+- `approval.resolved`
+- `alert.created`
+
 ## 运行
 
 ```bash

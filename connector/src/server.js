@@ -17,6 +17,9 @@ const deviceInfo = {
 
 const pairing = createPairingSession();
 const issuedTokens = new Map();
+const eventClients = new Set();
+const eventLog = [];
+let nextEventID = 1;
 if (API_TOKEN) {
   issuedTokens.set(API_TOKEN, {
     token: API_TOKEN,
@@ -193,6 +196,32 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload, null, 2));
 }
 
+function writeSSE(res, payload) {
+  res.write(`id: ${payload.id}\n`);
+  res.write(`event: ${payload.event}\n`);
+  res.write(`data: ${JSON.stringify({ time: payload.time, data: payload.data })}\n\n`);
+}
+
+function publishEvent(event, data) {
+  const payload = {
+    id: String(nextEventID++),
+    event,
+    time: isoNow(),
+    data
+  };
+
+  eventLog.push(payload);
+  if (eventLog.length > 200) {
+    eventLog.shift();
+  }
+
+  for (const client of eventClients) {
+    writeSSE(client, payload);
+  }
+
+  return payload;
+}
+
 function sendError(res, statusCode, code, message) {
   return sendJson(res, statusCode, {
     error: { code, message }
@@ -253,7 +282,7 @@ function extractBearerToken(req) {
 }
 
 function ensureAuth(req, res) {
-  if (req.url.startsWith('/pair/')) return true;
+  if (req.url.startsWith('/pair/') || req.url.startsWith('/health')) return true;
   const token = extractBearerToken(req);
   if (token && getTokenRecord(token)) return true;
   unauthorized(res);
@@ -331,6 +360,11 @@ async function handler(req, res) {
     }
 
     const token = issueToken(body);
+    publishEvent('pair.exchanged', {
+      node_id: deviceInfo.id,
+      client_name: body.client_name || 'Clawboard App',
+      device_name: body.device_name || 'Unknown Device'
+    });
     return sendJson(res, 200, {
       token,
       token_type: 'Bearer',
@@ -354,6 +388,39 @@ async function handler(req, res) {
       version: VERSION,
       time: isoNow()
     });
+  }
+
+  if (req.method === 'GET' && pathname === '/stream/events') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive'
+    });
+
+    res.write(': clawboard bridge event stream\n\n');
+    eventClients.add(res);
+
+    const lastEventID = req.headers['last-event-id'];
+    if (lastEventID) {
+      const pending = eventLog.filter(item => Number(item.id) > Number(lastEventID));
+      for (const event of pending) {
+        writeSSE(res, event);
+      }
+    } else {
+      for (const event of eventLog.slice(-10)) {
+        writeSSE(res, event);
+      }
+    }
+
+    const heartbeat = setInterval(() => {
+      res.write(`: ping ${Date.now()}\n\n`);
+    }, 15_000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      eventClients.delete(res);
+    });
+    return;
   }
 
   if (req.method === 'GET' && pathname === '/device/info') {
@@ -380,6 +447,12 @@ async function handler(req, res) {
   if (req.method === 'POST' && pathname === '/auth/revoke') {
     const token = extractBearerToken(req);
     const revoked = revokeToken(token);
+    if (revoked) {
+      publishEvent('auth.revoked', {
+        node_id: deviceInfo.id,
+        token_preview: token ? `${token.slice(0, 12)}...` : null
+      });
+    }
     return sendJson(res, 200, {
       ok: revoked,
       revoked_at: revoked ? isoNow() : null
@@ -406,6 +479,12 @@ async function handler(req, res) {
     lobster.recent_logs.unshift('paused via bridge api');
     const task = state.tasks.find(item => item.lobster_id === lobster.id && ['running', 'waiting_approval', 'busy'].includes(item.status));
     if (task) task.status = 'paused';
+    publishEvent('lobster.status.changed', {
+      lobster_id: lobster.id,
+      status: lobster.status,
+      task_id: task?.id || null,
+      action: 'pause'
+    });
     return sendJson(res, 200, controlResponse('pause', lobster.id));
   }
 
@@ -418,6 +497,12 @@ async function handler(req, res) {
     lobster.recent_logs.unshift('resumed via bridge api');
     const task = state.tasks.find(item => item.lobster_id === lobster.id && item.status === 'paused');
     if (task) task.status = 'running';
+    publishEvent('lobster.status.changed', {
+      lobster_id: lobster.id,
+      status: lobster.status,
+      task_id: task?.id || null,
+      action: 'resume'
+    });
     return sendJson(res, 200, controlResponse('resume', lobster.id));
   }
 
@@ -433,6 +518,19 @@ async function handler(req, res) {
     if (task) {
       task.status = 'terminated';
       task.error_reason = 'terminated_by_operator';
+    }
+    publishEvent('lobster.status.changed', {
+      lobster_id: lobster.id,
+      status: lobster.status,
+      task_id: task?.id || null,
+      action: 'terminate'
+    });
+    if (task) {
+      publishEvent('task.failed', {
+        task_id: task.id,
+        reason: task.error_reason,
+        source: 'operator_terminate'
+      });
     }
     return sendJson(res, 200, controlResponse('terminate', lobster.id));
   }
@@ -475,6 +573,14 @@ async function handler(req, res) {
       lobster.last_active_at = isoNow();
       lobster.recent_logs.unshift('task retried via bridge api');
     }
+
+    publishEvent('task.progress.updated', {
+      task_id: task.id,
+      status: task.status,
+      progress: task.progress,
+      current_step: task.current_step,
+      source: 'retry'
+    });
 
     return sendJson(res, 200, controlResponse('retry', task.id));
   }
@@ -520,6 +626,23 @@ async function handler(req, res) {
       lobster.recent_logs.unshift(`approval ${approval.id} approved`);
     }
 
+    publishEvent('approval.resolved', {
+      approval_id: approval.id,
+      status: approval.status,
+      task_id: approval.task_id,
+      lobster_id: approval.lobster_id,
+      granted_scope: approval.resolution?.granted_scope || approval.scope
+    });
+    if (task) {
+      publishEvent('task.progress.updated', {
+        task_id: task.id,
+        status: task.status,
+        progress: task.progress,
+        current_step: task.current_step,
+        source: 'approval_approved'
+      });
+    }
+
     return sendJson(res, 200, controlResponse('approve', approval.id, { approval }));
   }
 
@@ -558,6 +681,27 @@ async function handler(req, res) {
       lobster.recent_logs.unshift(`approval ${approval.id} rejected`);
     }
 
+    publishEvent('approval.resolved', {
+      approval_id: approval.id,
+      status: approval.status,
+      task_id: approval.task_id,
+      lobster_id: approval.lobster_id,
+      reason: approval.resolution?.reason || 'rejected_by_operator'
+    });
+    if (task) {
+      publishEvent('task.failed', {
+        task_id: task.id,
+        reason: task.error_reason,
+        source: 'approval_rejected'
+      });
+    }
+    publishEvent('alert.created', {
+      level: 'P1',
+      related_type: 'task',
+      related_id: approval.task_id,
+      title: '审批被拒绝导致任务失败'
+    });
+
     return sendJson(res, 200, controlResponse('reject', approval.id, { approval }));
   }
 
@@ -576,6 +720,11 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
+  publishEvent('bridge.started', {
+    node_id: deviceInfo.id,
+    node_name: deviceInfo.name,
+    version: VERSION
+  });
   console.log(`Clawboard Bridge listening on http://${HOST}:${PORT}`);
   console.log(`Pair code: ${pairing.pair_code} (expires at ${pairing.expires_at})`);
 });

@@ -243,6 +243,9 @@ Authorization: Bearer <token>
 ```
 
 建议事件类型：
+- `bridge.started`
+- `pair.exchanged`
+- `auth.revoked`
 - `lobster.status.changed`
 - `task.progress.updated`
 - `task.waiting_approval`
@@ -251,6 +254,16 @@ Authorization: Bearer <token>
 - `approval.resolved`
 - `alert.created`
 - `alert.resolved`
+
+当前骨架版已先实现：
+- `bridge.started`
+- `pair.exchanged`
+- `auth.revoked`
+- `lobster.status.changed`
+- `task.progress.updated`
+- `task.failed`
+- `approval.resolved`
+- `alert.created`
 
 ---
 
