@@ -2,8 +2,8 @@
 
 当前版本还没进入官方 skill 库，因此前期采用：
 
-1. **仓库内 skill 目录** 作为安装源
-2. **一键安装脚本** 降低操作门槛
+1. **仓库内可交付 skill bundle** 作为安装源
+2. **一键安装脚本** 负责把 skill + bridge runtime 一起装好
 3. **App 中“添加龙虾”入口** 完成配对
 
 ## 快速安装
@@ -11,21 +11,27 @@
 ```bash
 cd install
 bash install-clawboard-bridge.sh
+cd ~/.clawboard/skills/clawboard-bridge
+bash scripts/start-bridge.sh
+bash scripts/show-connection.sh
 ```
 
 安装脚本当前会：
 - 把 `skills/clawboard-bridge/` 复制到本地安装目录
+- 同时复制 `connector/` 运行时到 skill bundle 内
+- 生成默认配置、日志目录、运行目录
+- 提供 `start-bridge.sh / stop-bridge.sh / status-bridge.sh / show-connection.sh`
 - 输出可直接发给手机的连接串
-- 保留地址与配对码作为调试兜底
-- 提示下一步去 App 中完成“添加龙虾”
 
 ## 当前定位
 
-这不是最终官方分发形态，而是前期为了尽快跑通：
+这不是最终官方 skill 库分发形态，而是前期为了尽快跑通：
 - 安装
-- 启用
+- 启动
 - 配对
 - 连接
+
+但它已经不再只是说明型目录，而是一个可交付的前期 skill bundle。
 
 后续建议收敛到：
 - 官方 skill 库

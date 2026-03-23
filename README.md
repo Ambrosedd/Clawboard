@@ -12,22 +12,22 @@
 - `ios/` SwiftUI Demo 工程
 - `prototype/` 可点击交互原型
 - `connector/` 本地优先 Connector / Bridge 后端骨架
-- `skills/` Clawboard skill 设计骨架
+- `skills/` Clawboard skill 可交付 bundle 与设计说明
 - `install/` 前期安装与连接脚本
 
 ## 当前最重要的路径
 
 ### 连接服务器上的龙虾
-当前优先目标是先把“连接这一步”做顺。
+当前优先目标是先把“拿到 skill → 启动 bridge → 手机完成连接”这条链跑顺。
 
 请先看：
-- `docs/服务器龙虾连接说明.md`
 - `install/README.md`
+- `docs/服务器龙虾连接说明.md`
 
 当前推荐流程：
-1. 在服务器侧安装并启用 `clawboard-bridge` skill
-2. 启动本地 Bridge
-3. 复制 bridge 给出的连接串（或显示二维码）
+1. 运行安装脚本，把 `clawboard-bridge` skill bundle 安装到本地
+2. 在 skill 目录中运行 `bash scripts/start-bridge.sh`
+3. 运行 `bash scripts/show-connection.sh` 获取连接串
 4. 在 iPhone App 中进入“设置” → “添加龙虾”
 5. 直接粘贴连接串，或让 App 自动读取剪贴板后连接
 
