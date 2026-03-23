@@ -580,8 +580,14 @@ function extractBearerToken(req) {
   return auth.startsWith('Bearer ') ? auth.slice(7) : '';
 }
 
+function isLocalRequest(req) {
+  const remote = req.socket?.remoteAddress || '';
+  return remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
+}
+
 function ensureAuth(req, res) {
   if (req.url.startsWith('/pair/') || req.url.startsWith('/health')) return true;
+  if (req.url.startsWith('/debug/') && isLocalRequest(req)) return true;
   const token = extractBearerToken(req);
   if (token && getTokenRecord(token)) return true;
   unauthorized(res);
@@ -715,6 +721,55 @@ function controlResponse(action, targetId, extra = {}) {
     time: isoNow(),
     ...extra
   };
+}
+
+function createDebugApproval(body = {}) {
+  const lobster = getLobsterById(body.lobster_id || 'lobster-1') || state.lobsters[0];
+  const task = getTaskById(body.task_id || 'task-1') || state.tasks.find(item => item.lobster_id === lobster?.id) || state.tasks[0];
+  if (!lobster || !task) {
+    throw new Error('no lobster/task available for debug approval');
+  }
+
+  const approval = {
+    id: `approval-debug-${Date.now()}`,
+    task_id: task.id,
+    lobster_id: lobster.id,
+    title: body.title || '测试权限审批',
+    reason: body.reason || '用于验证 App 是否能显示新的审批卡片',
+    scope: body.scope || '/data/releases/tmp',
+    expires_at: isoNowPlusMinutes(Number(body.expires_in_minutes) || 30),
+    risk_level: body.risk_level || 'high',
+    status: 'pending',
+    resolved_at: null,
+    resolution: null,
+    lobster_name: lobster.name
+  };
+
+  state.approvals.unshift(approval);
+  lobster.status = 'busy';
+  lobster.last_active_at = isoNow();
+  appendLobsterLog(lobster, `debug approval created: ${approval.id}`);
+  task.status = 'waiting_approval';
+  task.current_step = 'debug_permission_request';
+  task.timeline.push({ step: 'debug_permission_request', status: 'waiting_approval' });
+
+  publishEvent('approval.created', {
+    approval_id: approval.id,
+    task_id: approval.task_id,
+    lobster_id: approval.lobster_id,
+    title: approval.title,
+    scope: approval.scope,
+    risk_level: approval.risk_level
+  });
+  publishEvent('task.progress.updated', {
+    task_id: task.id,
+    status: task.status,
+    progress: task.progress,
+    current_step: task.current_step,
+    source: 'debug_approval_created'
+  });
+
+  return approval;
 }
 
 async function handler(req, res) {
@@ -990,6 +1045,18 @@ async function handler(req, res) {
   if (req.method === 'GET' && pathname === '/approvals') {
     const items = state.approvals.filter(approval => approval.status === 'pending');
     return sendJson(res, 200, { items });
+  }
+
+  if (req.method === 'POST' && pathname === '/debug/test-approval') {
+    let body = {};
+    try {
+      body = await readBody(req);
+    } catch {
+      return invalidRequest(res, 'request body must be valid JSON');
+    }
+
+    const approval = createDebugApproval(body);
+    return sendJson(res, 200, controlResponse('debug_test_approval', approval.id, { approval }));
   }
 
   params = matchRoute(pathname, '/approvals/:id/approve');
