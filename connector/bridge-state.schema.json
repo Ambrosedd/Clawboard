@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clawboard.local/schemas/bridge-state.schema.json",
+  "title": "Clawboard Bridge State",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "clawboard.bridge.state.v1"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "lobsters": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/lobster" }
+    },
+    "tasks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/task" }
+    },
+    "approvals": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/approval" }
+    },
+    "alerts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/alert" }
+    }
+  },
+  "required": ["schema_version", "generated_at", "lobsters", "tasks", "approvals", "alerts"],
+  "$defs": {
+    "lobster": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "status": { "type": "string" },
+        "task_title": { "type": ["string", "null"] },
+        "last_active_at": { "type": "string", "format": "date-time" },
+        "risk_level": { "type": "string" },
+        "node_id": { "type": "string" },
+        "recent_logs": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "name", "status", "last_active_at", "risk_level", "node_id", "recent_logs"]
+    },
+    "task": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "status": { "type": "string" },
+        "progress": { "type": "number" },
+        "lobster_id": { "type": "string" },
+        "current_step": { "type": "string" },
+        "risk_level": { "type": "string" },
+        "risk_score": { "type": "number" },
+        "input_summary": { "type": ["string", "null"] },
+        "output_summary": { "type": ["string", "null"] },
+        "error_reason": { "type": ["string", "null"] },
+        "timeline": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "step": { "type": "string" },
+              "status": { "type": "string" }
+            },
+            "required": ["step", "status"]
+          }
+        }
+      },
+      "required": ["id", "title", "status", "progress", "lobster_id", "current_step", "risk_level", "risk_score", "timeline"]
+    },
+    "approval": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "task_id": { "type": "string" },
+        "lobster_id": { "type": "string" },
+        "title": { "type": "string" },
+        "reason": { "type": "string" },
+        "scope": { "type": "string" },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "risk_level": { "type": "string" },
+        "status": { "type": "string" },
+        "resolved_at": { "type": ["string", "null"], "format": "date-time" },
+        "resolution": { "type": ["object", "null"] }
+      },
+      "required": ["id", "task_id", "lobster_id", "title", "reason", "scope", "expires_at", "risk_level", "status"]
+    },
+    "alert": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "level": { "type": "string" },
+        "title": { "type": "string" },
+        "summary": { "type": "string" },
+        "related_type": { "type": ["string", "null"] },
+        "related_id": { "type": ["string", "null"] }
+      },
+      "required": ["id", "level", "title", "summary"]
+    }
+  }
+}

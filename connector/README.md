@@ -94,6 +94,27 @@ STATE_FILE=./sample-runtime-state.json node src/server.js
 
 这样可以把“真实运行态采集”与“对 App 暴露稳定 API / 鉴权 / 配对 / SSE”解耦。
 
+### Schema 与 adapter 示例
+
+仓库中已附带：
+- `bridge-state.schema.json`：状态文件 schema
+- `sample-runtime-state.json`：快照示例
+- `runtime-events.sample.jsonl`：事件流示例
+- `tools/runtime-jsonl-to-state.js`：把 JSONL 聚合成状态快照的最小 adapter
+
+示例：
+
+```bash
+cd connector
+npm run build:sample-state
+STATE_FILE=./sample-runtime-state.generated.json node src/server.js
+```
+
+这条链适合当前阶段验证：
+- runtime / skill 输出事件
+- adapter 聚合为标准快照
+- bridge 负责对 App 暴露统一 API
+
 ## 运行
 
 ```bash
