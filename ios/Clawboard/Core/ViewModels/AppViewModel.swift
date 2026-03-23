@@ -16,14 +16,21 @@ final class AppViewModel: ObservableObject {
     @Published var demoAutoplayEnabled = true
     @Published private(set) var bridgeConnection: BridgeConnection?
     @Published private(set) var bridgeConnectionSummary: BridgeConnectionSummary?
+    @Published private(set) var isRealtimeSyncActive = false
 
     private let client = ConnectorClient()
+    private let eventStreamClient = BridgeEventStreamClient()
     private let stateStore = AppStateStore()
     private let credentialStore: BridgeCredentialStoreProtocol = BridgeCredentialStore()
     private var autoplayTask: Task<Void, Never>?
+    private var eventStreamTask: Task<Void, Never>?
+    private var pendingRefreshTask: Task<Void, Never>?
+    private var lastBridgeEventID: String?
 
     deinit {
         autoplayTask?.cancel()
+        eventStreamTask?.cancel()
+        pendingRefreshTask?.cancel()
     }
 
     var activeTaskCount: Int {
@@ -63,6 +70,7 @@ final class AppViewModel: ObservableObject {
             bridgeConnection = credentialRecord.connection
             bridgeConnectionSummary = credentialRecord.summary
             selectedScenario = .normal
+            startEventStreamIfNeeded()
         }
 
         loadPhase = .loaded
@@ -84,6 +92,10 @@ final class AppViewModel: ObservableObject {
             apply(snapshot: snapshot)
             hasLoadedOnce = true
             loadPhase = .loaded
+            if bridgeConnection != nil {
+                isRealtimeSyncActive = true
+                startEventStreamIfNeeded()
+            }
             persistCurrentState()
             startAutoplayIfNeeded()
         } catch {
@@ -150,6 +162,7 @@ final class AppViewModel: ObservableObject {
         selectedScenario = .normal
         hasLoadedOnce = false
         stopAutoplay()
+        startEventStreamIfNeeded()
         toastMessage = "已连接 \(session.displayName)"
         persistCurrentState()
         await refresh()
@@ -167,6 +180,7 @@ final class AppViewModel: ObservableObject {
 
             bridgeConnection = nil
             bridgeConnectionSummary = nil
+            stopEventStream()
             credentialStore.clear()
             hasLoadedOnce = false
             toastMessage = "已断开 Bridge 连接，回到本地 Demo 模式"
@@ -336,6 +350,7 @@ final class AppViewModel: ObservableObject {
         stateStore.clear()
         bridgeConnection = nil
         bridgeConnectionSummary = nil
+        stopEventStream()
         credentialStore.clear()
         selectedScenario = .normal
         hasLoadedOnce = false
@@ -420,6 +435,62 @@ final class AppViewModel: ObservableObject {
     private func stopAutoplay() {
         autoplayTask?.cancel()
         autoplayTask = nil
+    }
+
+    private func startEventStreamIfNeeded() {
+        stopEventStream()
+        guard let bridgeConnection else { return }
+
+        isRealtimeSyncActive = true
+        eventStreamTask = eventStreamClient.stream(connection: bridgeConnection, lastEventID: lastBridgeEventID) { [weak self] event in
+            guard let self else { return }
+            await self.handleBridgeEvent(event)
+        }
+    }
+
+    private func stopEventStream() {
+        eventStreamTask?.cancel()
+        eventStreamTask = nil
+        pendingRefreshTask?.cancel()
+        pendingRefreshTask = nil
+        lastBridgeEventID = nil
+        isRealtimeSyncActive = false
+    }
+
+    private func handleBridgeEvent(_ event: BridgeEvent) async {
+        if let eventID = event.id, !eventID.isEmpty {
+            lastBridgeEventID = eventID
+        }
+
+        switch event.name {
+        case "bridge.started", "pair.exchanged", "auth.revoked", "lobster.status.changed", "task.progress.updated", "task.failed", "approval.resolved", "alert.created":
+            scheduleRefreshFromRealtimeEvent(named: event.name)
+        default:
+            break
+        }
+    }
+
+    private func scheduleRefreshFromRealtimeEvent(named eventName: String) {
+        pendingRefreshTask?.cancel()
+        pendingRefreshTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard let self, !Task.isCancelled else { return }
+            await self.refreshFromRealtimeEvent(named: eventName)
+        }
+    }
+
+    private func refreshFromRealtimeEvent(named eventName: String) async {
+        guard bridgeConnection != nil else { return }
+        do {
+            let snapshot = try await client.fetchSnapshot(for: selectedScenario, bridgeConnection: bridgeConnection)
+            apply(snapshot: snapshot)
+            hasLoadedOnce = true
+            loadPhase = .loaded
+            persistCurrentState()
+        } catch {
+            isRealtimeSyncActive = false
+            toastMessage = "实时同步暂时中断：\(eventName) 后刷新失败"
+        }
     }
 
     private func advanceDemoStateIfNeeded() {

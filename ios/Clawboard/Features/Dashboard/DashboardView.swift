@@ -46,7 +46,7 @@ struct DashboardView: View {
                     }
                 }
                 .overlay(alignment: .topTrailing) {
-                    StatusBadge(text: viewModel.isBridgeConnected ? "真实 Bridge" : viewModel.selectedScenario.title, tone: AppTheme.brand)
+                    StatusBadge(text: viewModel.isBridgeConnected ? (viewModel.isRealtimeSyncActive ? "真实 Bridge · 实时中" : "真实 Bridge") : viewModel.selectedScenario.title, tone: AppTheme.brand)
                         .padding(12)
                 }
 

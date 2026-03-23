@@ -24,6 +24,9 @@ struct SettingsView: View {
                             Text("当前已启用真实 Bridge 拉取与控制闭环：审批、暂停、恢复、终止、重试都会直接调用服务端接口。")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                            Text(viewModel.isRealtimeSyncActive ? "实时事件同步已连接，状态会自动刷新。" : "当前未建立实时事件流，将以手动/操作后刷新为主。")
+                                .font(.caption)
+                                .foregroundStyle(viewModel.isRealtimeSyncActive ? AppTheme.success : .secondary)
                         }
 
                         Button("断开 Bridge 连接") {
