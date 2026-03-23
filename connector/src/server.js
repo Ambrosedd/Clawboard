@@ -68,7 +68,7 @@ const deviceInfo = {
 const capabilityLeases = [];
 const commandAliases = permissionProfile.command_aliases || {};
 
-const pairing = createPairingSession();
+let pairing = createPairingSession();
 const issuedTokens = new Map();
 const eventClients = new Set();
 const eventLog = [];
@@ -122,6 +122,13 @@ function createPairingSession() {
     bridge_url: baseURL,
     pairing_link: pairingLink
   };
+}
+
+function getActivePairingSession() {
+  if (!pairing || isExpired(pairing.expires_at)) {
+    pairing = createPairingSession();
+  }
+  return pairing;
 }
 
 function createSeedState(nodeId) {
@@ -717,7 +724,7 @@ async function handler(req, res) {
   if (!ensureAuth(req, res)) return;
 
   if (req.method === 'GET' && pathname === '/pair/session') {
-    return sendJson(res, 200, pairing);
+    return sendJson(res, 200, getActivePairingSession());
   }
 
   if (req.method === 'POST' && pathname === '/pair/exchange') {
@@ -732,11 +739,13 @@ async function handler(req, res) {
       return invalidRequest(res, 'pair_code is required');
     }
 
-    if (isExpired(pairing.expires_at)) {
+    const activePairing = getActivePairingSession();
+
+    if (isExpired(activePairing.expires_at)) {
       return invalidRequest(res, 'pair code is invalid or expired', 'pair_code_invalid');
     }
 
-    if (body.pair_code !== pairing.pair_code) {
+    if (body.pair_code !== activePairing.pair_code) {
       return invalidRequest(res, 'pair code is invalid or expired', 'pair_code_invalid');
     }
 
@@ -1175,7 +1184,8 @@ server.listen(PORT, HOST, () => {
     startStateFileWatcher(STATE_FILE);
   }
   console.log(`Clawboard Bridge listening on http://${HOST}:${PORT}`);
-  console.log(`Pair code: ${pairing.pair_code} (expires at ${pairing.expires_at})`);
+  const activePairing = getActivePairingSession();
+  console.log(`Pair code: ${activePairing.pair_code} (expires at ${activePairing.expires_at})`);
   if (STATE_FILE) {
     console.log(`External state file: ${path.resolve(STATE_FILE)}`);
   }
