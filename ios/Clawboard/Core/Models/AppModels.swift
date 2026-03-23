@@ -32,6 +32,51 @@ struct ApprovalItem: Identifiable, Codable, Hashable {
     let lobsterName: String
 }
 
+enum TemporaryCapabilityKind: String, CaseIterable, Codable, Hashable {
+    case directoryAccess = "directory_access"
+    case commandAlias = "command_alias"
+
+    var title: String {
+        switch self {
+        case .directoryAccess: return "目录访问"
+        case .commandAlias: return "命令白名单"
+        }
+    }
+}
+
+struct CapabilityLease: Identifiable, Codable, Hashable {
+    let id: String
+    let approvalID: String
+    let lobsterID: String
+    let taskID: String
+    let capabilityKind: String
+    let grantedScope: String
+    let expiresAt: String
+    let createdAt: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case approvalID = "approval_id"
+        case lobsterID = "lobster_id"
+        case taskID = "task_id"
+        case capabilityKind = "capability_kind"
+        case grantedScope = "granted_scope"
+        case expiresAt = "expires_at"
+        case createdAt = "created_at"
+    }
+}
+
+struct CommandAliasOption: Identifiable, Codable, Hashable {
+    let id: String
+    let title: String
+    let commandPreview: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title
+        case commandPreview = "command_preview"
+    }
+}
+
 struct AlertItem: Identifiable, Codable, Hashable {
     let id: String
     let level: String

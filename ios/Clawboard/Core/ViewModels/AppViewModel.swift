@@ -17,6 +17,9 @@ final class AppViewModel: ObservableObject {
     @Published private(set) var bridgeConnection: BridgeConnection?
     @Published private(set) var bridgeConnectionSummary: BridgeConnectionSummary?
     @Published private(set) var isRealtimeSyncActive = false
+    @Published private(set) var activeCapabilityLeases: [CapabilityLease] = []
+    @Published private(set) var supportedCommandAliases: [CommandAliasOption] = []
+    @Published private(set) var permissionProfile: String?
 
     private let client = ConnectorClient()
     private let eventStreamClient = BridgeEventStreamClient()
@@ -95,6 +98,7 @@ final class AppViewModel: ObservableObject {
             if bridgeConnection != nil {
                 isRealtimeSyncActive = true
                 startEventStreamIfNeeded()
+                await refreshCapabilityMetadata()
             }
             persistCurrentState()
             startAutoplayIfNeeded()
@@ -193,12 +197,29 @@ final class AppViewModel: ObservableObject {
         }
     }
 
-    func approve(_ approval: ApprovalItem) async {
+    func approve(
+        _ approval: ApprovalItem,
+        grantedScope: String? = nil,
+        durationMinutes: Int = 30,
+        capabilityKind: TemporaryCapabilityKind = .directoryAccess,
+        commandAlias: String? = nil,
+        restartAfterGrant: Bool = false
+    ) async {
         if let bridgeConnection {
             do {
-                try await client.approve(approval, on: bridgeConnection)
-                toastMessage = "已批准：\(approval.title)"
+                try await client.approve(
+                    approval,
+                    on: bridgeConnection,
+                    grantedScope: grantedScope,
+                    durationMinutes: durationMinutes,
+                    capabilityKind: capabilityKind,
+                    commandAlias: commandAlias,
+                    restartAfterGrant: restartAfterGrant
+                )
+                let scopeText = capabilityKind == .commandAlias ? (commandAlias ?? "白名单命令") : (grantedScope ?? approval.scope)
+                toastMessage = restartAfterGrant ? "已临时授权并重启龙虾：\(scopeText)" : "已临时授权：\(scopeText)"
                 await refresh()
+                await refreshCapabilityMetadata()
             } catch {
                 toastMessage = "批准失败：\(error.localizedDescription)"
             }
@@ -393,6 +414,34 @@ final class AppViewModel: ObservableObject {
 
     func relatedTask(for lobster: LobsterSummary) -> TaskSummary? {
         tasks.first { $0.lobsterID == lobster.id }
+    }
+
+    func refreshCapabilityMetadata() async {
+        guard let bridgeConnection else { return }
+        do {
+            let deviceInfo = try await client.fetchDeviceCapabilities(on: bridgeConnection)
+            let leases = try await client.fetchCapabilityLeases(on: bridgeConnection)
+            permissionProfile = deviceInfo.permissionProfile
+            supportedCommandAliases = deviceInfo.supportedCommandAliases ?? []
+            activeCapabilityLeases = leases.items
+        } catch {
+            print("Failed to refresh capability metadata: \(error)")
+        }
+    }
+
+    func restartLobster(_ lobsterID: String) async {
+        guard let bridgeConnection else {
+            toastMessage = "Demo 模式下暂不支持真实重启"
+            return
+        }
+        do {
+            try await client.restart(lobsterID: lobsterID, on: bridgeConnection)
+            toastMessage = "已发送重启指令"
+            await refresh()
+            await refreshCapabilityMetadata()
+        } catch {
+            toastMessage = "重启失败：\(error.localizedDescription)"
+        }
     }
 
     private func apply(snapshot: AppSnapshot) {

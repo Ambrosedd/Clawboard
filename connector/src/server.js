@@ -9,13 +9,31 @@ const HOST = process.env.HOST || '0.0.0.0';
 const PORT = Number(process.env.PORT || 8787);
 const API_TOKEN = process.env.API_TOKEN || '';
 const STATE_FILE = process.env.STATE_FILE || '';
+const PERMISSION_PROFILE = process.env.PERMISSION_PROFILE || 'legacy';
 
 const deviceInfo = {
   id: process.env.NODE_ID || 'node-local-1',
   name: process.env.CONNECTOR_NAME || os.hostname(),
   platform: process.env.PLATFORM || process.platform,
   connector_version: VERSION,
-  network_mode: process.env.NETWORK_MODE || 'direct'
+  network_mode: process.env.NETWORK_MODE || 'direct',
+  permission_profile: PERMISSION_PROFILE
+};
+
+const capabilityLeases = [];
+const commandAliases = {
+  git_status: {
+    title: 'Git 状态检查',
+    command_preview: 'git status --short'
+  },
+  release_build: {
+    title: 'Release 构建',
+    command_preview: 'npm run build'
+  },
+  restart_worker: {
+    title: '重启 Worker',
+    command_preview: 'systemctl restart lobster-worker'
+  }
 };
 
 const pairing = createPairingSession();
@@ -543,6 +561,60 @@ function getApprovalById(approvalId) {
   return state.approvals.find(approval => approval.id === approvalId);
 }
 
+function currentCapabilityLeases() {
+  const now = Date.now();
+  return capabilityLeases.filter(lease => Date.parse(lease.expires_at) > now);
+}
+
+function createCapabilityLease({ approval, grantedScope, durationMinutes, capabilityKind }) {
+  const expiresAt = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
+  const lease = {
+    id: `lease-${approval.id}`,
+    approval_id: approval.id,
+    lobster_id: approval.lobster_id,
+    task_id: approval.task_id,
+    capability_kind: capabilityKind,
+    granted_scope: grantedScope,
+    expires_at: expiresAt,
+    created_at: isoNow()
+  };
+  capabilityLeases.push(lease);
+  return lease;
+}
+
+function appendLobsterLog(lobster, message) {
+  if (!lobster) return;
+  lobster.recent_logs.unshift(message);
+  lobster.recent_logs = lobster.recent_logs.slice(0, 12);
+}
+
+function restartLobsterRuntime(lobster, task, reason = 'restart_requested') {
+  if (!lobster) return;
+  lobster.status = 'busy';
+  lobster.last_active_at = isoNow();
+  appendLobsterLog(lobster, `runtime restarted via bridge (${reason})`);
+  if (task) {
+    task.status = 'running';
+    task.current_step = 'restart_runtime';
+    task.timeline.push({ step: 'restart_runtime', status: 'done' });
+  }
+  publishEvent('lobster.status.changed', {
+    lobster_id: lobster.id,
+    status: lobster.status,
+    task_id: task?.id || null,
+    action: 'restart'
+  });
+  if (task) {
+    publishEvent('task.progress.updated', {
+      task_id: task.id,
+      status: task.status,
+      progress: task.progress,
+      current_step: task.current_step,
+      source: reason
+    });
+  }
+}
+
 function lobsterDetail(lobster) {
   const currentTask = state.tasks.find(task => task.lobster_id === lobster.id && ['running', 'waiting_approval', 'paused', 'failed'].includes(task.status)) || null;
   return {
@@ -670,7 +742,10 @@ async function handler(req, res) {
   if (req.method === 'GET' && pathname === '/device/info') {
     return sendJson(res, 200, {
       ...deviceInfo,
-      state_status: stateSourceStatus
+      state_status: stateSourceStatus,
+      supported_capability_kinds: ['directory_access', 'command_alias'],
+      supported_command_aliases: Object.entries(commandAliases).map(([id, item]) => ({ id, ...item })),
+      active_capability_leases: currentCapabilityLeases()
     });
   }
 
@@ -852,12 +927,32 @@ async function handler(req, res) {
       return invalidRequest(res, 'request body must be valid JSON');
     }
 
+    const durationMinutes = Math.max(1, Math.min(Number(body.duration_minutes) || 30, 240));
+    const grantedScope = body.granted_scope || approval.scope;
+    const capabilityKind = body.capability_kind === 'command_alias' ? 'command_alias' : 'directory_access';
+    const restartAfterGrant = Boolean(body.restart_after_grant);
+    const commandAlias = capabilityKind === 'command_alias' ? String(body.command_alias || '').trim() : null;
+
+    if (capabilityKind === 'command_alias' && (!commandAlias || !commandAliases[commandAlias])) {
+      return invalidRequest(res, 'command_alias must be one of the supported aliases');
+    }
+
     approval.status = 'approved';
     approval.resolved_at = isoNow();
     approval.resolution = {
-      granted_scope: body.granted_scope || approval.scope,
-      duration_minutes: body.duration_minutes || 30
+      granted_scope: grantedScope,
+      duration_minutes: durationMinutes,
+      capability_kind: capabilityKind,
+      command_alias: commandAlias,
+      restart_after_grant: restartAfterGrant
     };
+
+    const lease = createCapabilityLease({
+      approval,
+      grantedScope,
+      durationMinutes,
+      capabilityKind
+    });
 
     const task = getTaskById(approval.task_id);
     if (task) {
@@ -870,7 +965,10 @@ async function handler(req, res) {
     if (lobster) {
       lobster.status = 'busy';
       lobster.last_active_at = isoNow();
-      lobster.recent_logs.unshift(`approval ${approval.id} approved`);
+      const scopeText = capabilityKind === 'command_alias'
+        ? `command alias ${commandAlias}`
+        : `directory ${grantedScope}`;
+      appendLobsterLog(lobster, `temporary capability granted: ${scopeText} (${durationMinutes}m)`);
     }
 
     publishEvent('approval.resolved', {
@@ -878,7 +976,11 @@ async function handler(req, res) {
       status: approval.status,
       task_id: approval.task_id,
       lobster_id: approval.lobster_id,
-      granted_scope: approval.resolution?.granted_scope || approval.scope
+      granted_scope: approval.resolution?.granted_scope || approval.scope,
+      capability_kind: capabilityKind,
+      command_alias: commandAlias,
+      lease_id: lease.id,
+      restart_after_grant: restartAfterGrant
     });
     if (task) {
       publishEvent('task.progress.updated', {
@@ -890,7 +992,11 @@ async function handler(req, res) {
       });
     }
 
-    return sendJson(res, 200, controlResponse('approve', approval.id, { approval }));
+    if (restartAfterGrant) {
+      restartLobsterRuntime(lobster, task, 'temporary_capability_granted');
+    }
+
+    return sendJson(res, 200, controlResponse('approve', approval.id, { approval, capability_lease: lease }));
   }
 
   params = matchRoute(pathname, '/approvals/:id/reject');
@@ -950,6 +1056,19 @@ async function handler(req, res) {
     });
 
     return sendJson(res, 200, controlResponse('reject', approval.id, { approval }));
+  }
+
+  if (req.method === 'GET' && pathname === '/capabilities/leases') {
+    return sendJson(res, 200, { items: currentCapabilityLeases() });
+  }
+
+  params = matchRoute(pathname, '/lobsters/:id/restart');
+  if (req.method === 'POST' && params) {
+    const lobster = getLobsterById(params.id);
+    if (!lobster) return notFound(res, 'lobster');
+    const task = state.tasks.find(item => item.lobster_id === lobster.id && ['running', 'waiting_approval', 'paused', 'failed'].includes(item.status)) || null;
+    restartLobsterRuntime(lobster, task, 'operator_restart');
+    return sendJson(res, 200, controlResponse('restart', lobster.id));
   }
 
   if (req.method === 'GET' && pathname === '/alerts') {

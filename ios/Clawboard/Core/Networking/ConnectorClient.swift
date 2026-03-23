@@ -49,14 +49,40 @@ final class ConnectorClient {
         try validate(response: response, data: data)
     }
 
-    func approve(_ approval: ApprovalItem, on bridgeConnection: BridgeConnection, grantedScope: String? = nil, durationMinutes: Int = 30) async throws {
-        let payload = BridgeApproveRequest(grantedScope: grantedScope ?? approval.scope, durationMinutes: durationMinutes)
+    func approve(
+        _ approval: ApprovalItem,
+        on bridgeConnection: BridgeConnection,
+        grantedScope: String? = nil,
+        durationMinutes: Int = 30,
+        capabilityKind: TemporaryCapabilityKind = .directoryAccess,
+        commandAlias: String? = nil,
+        restartAfterGrant: Bool = false
+    ) async throws {
+        let payload = BridgeApproveRequest(
+            grantedScope: grantedScope ?? approval.scope,
+            durationMinutes: durationMinutes,
+            capabilityKind: capabilityKind.rawValue,
+            commandAlias: commandAlias,
+            restartAfterGrant: restartAfterGrant
+        )
         try await sendAuthorized(
             bridgeConnection,
             path: "/approvals/\(approval.id)/approve",
             method: "POST",
             body: payload
         )
+    }
+
+    func restart(lobsterID: String, on bridgeConnection: BridgeConnection) async throws {
+        try await sendTaskControl(path: "/lobsters/\(lobsterID)/restart", on: bridgeConnection)
+    }
+
+    func fetchDeviceCapabilities(on bridgeConnection: BridgeConnection) async throws -> BridgeDeviceInfo {
+        try await fetchAuthorized(bridgeConnection, path: "/device/info")
+    }
+
+    func fetchCapabilityLeases(on bridgeConnection: BridgeConnection) async throws -> CapabilityLeaseListResponse {
+        try await fetchAuthorized(bridgeConnection, path: "/capabilities/leases")
     }
 
     func reject(_ approval: ApprovalItem, on bridgeConnection: BridgeConnection, reason: String = "rejected_by_operator") async throws {
@@ -350,19 +376,41 @@ private struct BridgeAlertSummary: Decodable {
     }
 }
 
-private struct BridgeDeviceInfo: Decodable {
+struct BridgeDeviceInfo: Decodable {
     let id: String
     let name: String
     let platform: String
+    let permissionProfile: String?
+    let supportedCapabilityKinds: [String]?
+    let supportedCommandAliases: [CommandAliasOption]?
+    let activeCapabilityLeases: [CapabilityLease]?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, platform
+        case permissionProfile = "permission_profile"
+        case supportedCapabilityKinds = "supported_capability_kinds"
+        case supportedCommandAliases = "supported_command_aliases"
+        case activeCapabilityLeases = "active_capability_leases"
+    }
+}
+
+struct CapabilityLeaseListResponse: Decodable {
+    let items: [CapabilityLease]
 }
 
 private struct BridgeApproveRequest: Encodable {
     let grantedScope: String
     let durationMinutes: Int
+    let capabilityKind: String
+    let commandAlias: String?
+    let restartAfterGrant: Bool
 
     private enum CodingKeys: String, CodingKey {
         case grantedScope = "granted_scope"
         case durationMinutes = "duration_minutes"
+        case capabilityKind = "capability_kind"
+        case commandAlias = "command_alias"
+        case restartAfterGrant = "restart_after_grant"
     }
 }
 
