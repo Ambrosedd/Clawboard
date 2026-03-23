@@ -8,9 +8,31 @@
 
 ## 快速安装
 
+### 方式 1：在仓库里本地执行
+
 ```bash
 cd install
 bash install-clawboard-bridge.sh
+cd ~/.clawboard/skills/clawboard-bridge
+bash scripts/start-bridge.sh
+bash scripts/show-connection.sh
+```
+
+### 方式 2：直接复制一键安装命令给龙虾执行
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ambrosedd/Clawboard/main/install/bootstrap-clawboard-bridge.sh | bash
+```
+
+也可以只给龙虾下载链接：
+
+```text
+https://raw.githubusercontent.com/Ambrosedd/Clawboard/main/install/bootstrap-clawboard-bridge.sh
+```
+
+安装完成后：
+
+```bash
 cd ~/.clawboard/skills/clawboard-bridge
 bash scripts/start-bridge.sh
 bash scripts/show-connection.sh

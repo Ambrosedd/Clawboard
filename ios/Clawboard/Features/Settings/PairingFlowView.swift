@@ -1,6 +1,9 @@
 import SwiftUI
 import UIKit
 
+private let skillBootstrapURL = "https://raw.githubusercontent.com/Ambrosedd/clawboard-install/main/bootstrap-clawboard-bridge.sh"
+private let skillInstallCommand = "curl -fsSL https://raw.githubusercontent.com/Ambrosedd/clawboard-install/main/bootstrap-clawboard-bridge.sh | bash"
+
 private extension BridgePairSession {
     func pairingLink(baseURL: String) -> String {
         let encodedURL = baseURL.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? baseURL
@@ -54,11 +57,42 @@ struct PairingFlowView: View {
                 .disabled(isPairing || !canAttemptPair)
             }
 
-            Section("服务器上怎么操作？") {
+            Section("先让龙虾安装这个 skill") {
+                Text("把下面的一键安装命令复制给你的龙虾执行。装好后，再让龙虾运行 start-bridge.sh 和 show-connection.sh，把连接串发回手机。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("1. 在龙虾环境中安装 Clawboard skill", systemImage: "1.circle")
-                    Label("2. 启用移动连接，复制连接串或显示二维码", systemImage: "2.circle")
-                    Label("3. 在手机里粘贴连接串，或直接扫码", systemImage: "3.circle")
+                    Text("下载链接")
+                        .font(.caption.weight(.semibold))
+                    Text(skillBootstrapURL)
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                        .foregroundStyle(.secondary)
+
+                    Button("复制下载链接") {
+                        UIPasteboard.general.string = skillBootstrapURL
+                        viewModel.toastMessage = "已复制下载链接"
+                    }
+
+                    Text("一键安装命令")
+                        .font(.caption.weight(.semibold))
+                        .padding(.top, 8)
+                    Text(skillInstallCommand)
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                        .foregroundStyle(.secondary)
+
+                    Button("复制安装命令") {
+                        UIPasteboard.general.string = skillInstallCommand
+                        viewModel.toastMessage = "已复制安装命令"
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("1. 把安装命令发给龙虾执行", systemImage: "1.circle")
+                    Label("2. 让龙虾运行 start-bridge.sh 和 show-connection.sh", systemImage: "2.circle")
+                    Label("3. 把返回的连接串粘贴到这里完成连接", systemImage: "3.circle")
                 }
                 .font(.subheadline)
             }
@@ -99,7 +133,7 @@ struct PairingFlowView: View {
             }
 
             Section("说明") {
-                Text("默认情况下，你不需要理解 Bridge、Connector 或 Sidecar。它们是内部实现。你只需要：安装 skill、复制连接串、在 App 里连接。")
+                Text("默认情况下，你不需要理解 Bridge、Connector 或 Sidecar。它们是内部实现。你只需要：复制安装命令给龙虾、让龙虾回传连接串、在 App 里连接。")
                     .foregroundStyle(.secondary)
             }
 

@@ -25,9 +25,9 @@
 - `docs/服务器龙虾连接说明.md`
 
 当前推荐流程：
-1. 运行安装脚本，把 `clawboard-bridge` skill bundle 安装到本地
-2. 在 skill 目录中运行 `bash scripts/start-bridge.sh`
-3. 运行 `bash scripts/show-connection.sh` 获取连接串
+1. 在 App 中复制一键安装命令或下载链接，交给龙虾执行
+2. 安装完成后，让龙虾运行 `bash scripts/start-bridge.sh`
+3. 再让龙虾运行 `bash scripts/show-connection.sh` 获取连接串
 4. 在 iPhone App 中进入“设置” → “添加龙虾”
 5. 直接粘贴连接串，或让 App 自动读取剪贴板后连接
 
