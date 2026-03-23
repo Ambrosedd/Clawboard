@@ -27,6 +27,7 @@
 		B00000000000000000000003 /* InfoCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000013 /* InfoCard.swift */; };
 		B00000000000000000000004 /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000014 /* StatusBadge.swift */; };
 		B00000000000000000000005 /* BridgeCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000015 /* BridgeCredentialStore.swift */; };
+		B00000000000000000000006 /* BridgeEventStreamClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000016 /* BridgeEventStreamClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -51,6 +52,7 @@
 		B00000000000000000000013 /* InfoCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clawboard/Shared/Components/InfoCard.swift; sourceTree = "<group>"; };
 		B00000000000000000000014 /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clawboard/Shared/Components/StatusBadge.swift; sourceTree = "<group>"; };
 		B00000000000000000000015 /* BridgeCredentialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clawboard/Core/Networking/BridgeCredentialStore.swift; sourceTree = "<group>"; };
+		B00000000000000000000016 /* BridgeEventStreamClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clawboard/Core/Networking/BridgeEventStreamClient.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -81,6 +83,7 @@
 				B00000000000000000000011 /* AppStateStore.swift */,
 				A00000000000000000000014 /* ConnectorClient.swift */,
 				B00000000000000000000015 /* BridgeCredentialStore.swift */,
+				B00000000000000000000016 /* BridgeEventStreamClient.swift */,
 				A0000000000000000000001B /* MockData.swift */,
 				A0000000000000000000001C /* AppViewModel.swift */,
 				A00000000000000000000015 /* DashboardView.swift */,
@@ -182,6 +185,7 @@
 				B00000000000000000000001 /* AppStateStore.swift in Sources */,
 				A00000000000000000000004 /* ConnectorClient.swift in Sources */,
 				B00000000000000000000005 /* BridgeCredentialStore.swift in Sources */,
+				B00000000000000000000006 /* BridgeEventStreamClient.swift in Sources */,
 				A0000000000000000000000B /* MockData.swift in Sources */,
 				A0000000000000000000000C /* AppViewModel.swift in Sources */,
 				B00000000000000000000002 /* AppTheme.swift in Sources */,
