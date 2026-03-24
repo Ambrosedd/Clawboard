@@ -680,40 +680,128 @@ function notFound(res, entity = 'resource') {
 }
 
 function readRuntimeStatus() {
+  const baseSeed = {
+    last_restart_requested_at: null,
+    last_restart_request_id: null,
+    last_restart_requested_by: null,
+    last_restart_handled_at: null,
+    restart_execution_state: null,
+    restart_result: null,
+    restart_evidence: null,
+    supervisor_ack: null
+  };
+
+  const mergeSupervisorAck = runtimeStatus => {
+    const action = permissionProfile.restart_action;
+    if (!action || action.type !== 'supervisor_hint' || !action.ack_file) {
+      return runtimeStatus;
+    }
+
+    const ackPath = path.isAbsolute(action.ack_file) ? action.ack_file : path.resolve(process.cwd(), action.ack_file);
+    if (!fs.existsSync(ackPath)) {
+      return {
+        ...runtimeStatus,
+        supervisor_ack: {
+          source: ackPath,
+          status: 'missing',
+          target: action.target || null,
+          request_id: null,
+          requested_at: null,
+          requested_by: null,
+          result: null,
+          evidence: null,
+          updated_at: null
+        }
+      };
+    }
+
+    try {
+      const ack = JSON.parse(fs.readFileSync(ackPath, 'utf8'));
+      const ackStatus = ack.status || 'unknown';
+      const ackResult = ack.result || null;
+      const ackEvidence = ack.evidence || null;
+      const merged = {
+        ...runtimeStatus,
+        supervisor_ack: {
+          source: ackPath,
+          status: ackStatus,
+          target: ack.target || action.target || null,
+          request_id: ack.request_id || null,
+          requested_at: ack.requested_at || null,
+          requested_by: ack.requested_by || null,
+          result: ackResult,
+          evidence: ackEvidence,
+          updated_at: ack.updated_at || null
+        }
+      };
+
+      if (ack.request_id) merged.last_restart_request_id = merged.last_restart_request_id || ack.request_id;
+      if (ack.requested_at) merged.last_restart_requested_at = merged.last_restart_requested_at || ack.requested_at;
+      if (ack.requested_by) merged.last_restart_requested_by = merged.last_restart_requested_by || ack.requested_by;
+
+      if (ackStatus === 'requested' && !merged.restart_execution_state) {
+        merged.restart_execution_state = 'requested';
+        merged.restart_evidence = merged.restart_evidence || ackEvidence || `supervisor_ack_requested:${merged.supervisor_ack.target || 'default'}`;
+      } else if (ackStatus === 'acknowledged') {
+        merged.restart_execution_state = 'acknowledged';
+        merged.restart_evidence = ackEvidence || merged.restart_evidence || `supervisor_acknowledged:${merged.supervisor_ack.target || 'default'}`;
+      } else if (ackStatus === 'completed') {
+        merged.restart_execution_state = 'completed';
+        merged.restart_result = ackResult || merged.restart_result || 'success';
+        merged.restart_evidence = ackEvidence || merged.restart_evidence || `supervisor_completed:${merged.supervisor_ack.target || 'default'}`;
+      } else if (ackStatus === 'failed') {
+        merged.restart_execution_state = 'failed';
+        merged.restart_result = ackResult || 'error';
+        merged.restart_evidence = ackEvidence || merged.restart_evidence || `supervisor_failed:${merged.supervisor_ack.target || 'default'}`;
+      }
+
+      return merged;
+    } catch (error) {
+      return {
+        ...runtimeStatus,
+        supervisor_ack: {
+          source: ackPath,
+          status: 'invalid',
+          target: action.target || null,
+          request_id: null,
+          requested_at: null,
+          requested_by: null,
+          result: 'error',
+          evidence: error.message,
+          updated_at: null
+        },
+        restart_execution_state: runtimeStatus.restart_execution_state || 'invalid',
+        restart_result: runtimeStatus.restart_result || 'error',
+        restart_evidence: runtimeStatus.restart_evidence || `supervisor_ack_invalid:${error.message}`
+      };
+    }
+  };
+
   if (!STATE_FILE) {
-    return {
+    return mergeSupervisorAck({
       status: 'seed',
       source: null,
-      last_restart_requested_at: null,
-      last_restart_request_id: null,
-      last_restart_requested_by: null,
-      last_restart_handled_at: null,
-      restart_execution_state: 'seed',
-      restart_result: null,
-      restart_evidence: null
-    };
+      ...baseSeed,
+      restart_execution_state: 'seed'
+    });
   }
 
   const statusFile = path.join(path.dirname(path.resolve(STATE_FILE)), 'runtime-status.json');
   if (!fs.existsSync(statusFile)) {
-    return {
+    return mergeSupervisorAck({
       status: 'unknown',
       source: statusFile,
-      last_restart_requested_at: null,
-      last_restart_request_id: null,
-      last_restart_requested_by: null,
-      last_restart_handled_at: null,
-      restart_execution_state: 'unknown',
-      restart_result: null,
-      restart_evidence: null
-    };
+      ...baseSeed,
+      restart_execution_state: 'unknown'
+    });
   }
 
   try {
     const parsed = JSON.parse(fs.readFileSync(statusFile, 'utf8'));
-    return {
+    return mergeSupervisorAck({
       status: parsed.status || 'unknown',
       source: statusFile,
+      ...baseSeed,
       last_restart_requested_at: parsed.last_restart_requested_at || null,
       last_restart_request_id: parsed.last_restart_request_id || null,
       last_restart_requested_by: parsed.last_restart_requested_by || null,
@@ -721,20 +809,16 @@ function readRuntimeStatus() {
       restart_execution_state: parsed.restart_execution_state || null,
       restart_result: parsed.restart_result || null,
       restart_evidence: parsed.restart_evidence || null
-    };
+    });
   } catch (error) {
-    return {
+    return mergeSupervisorAck({
       status: 'invalid',
       source: statusFile,
-      last_restart_requested_at: null,
-      last_restart_request_id: null,
-      last_restart_requested_by: null,
-      last_restart_handled_at: null,
+      ...baseSeed,
       restart_execution_state: 'invalid',
       restart_result: 'error',
-      restart_evidence: null,
       error: error.message
-    };
+    });
   }
 }
 

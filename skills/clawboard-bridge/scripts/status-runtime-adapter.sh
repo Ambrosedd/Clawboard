@@ -35,6 +35,8 @@ print(f"- last_restart_handled_at: {data.get('last_restart_handled_at')}")
 print(f"- restart_execution_state: {data.get('restart_execution_state')}")
 print(f"- restart_result: {data.get('restart_result')}")
 print(f"- restart_evidence: {data.get('restart_evidence')}")
+print(f"- last_restart_request_id: {data.get('last_restart_request_id')}")
+print(f"- last_restart_requested_by: {data.get('last_restart_requested_by')}")
 PY
 fi
 [ -f "${LOG_FILE}" ] && echo "日志: ${LOG_FILE}"

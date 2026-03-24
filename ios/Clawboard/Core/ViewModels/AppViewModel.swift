@@ -749,6 +749,10 @@ final class AppViewModel: ObservableObject {
         func mapExecutionState(_ state: String?) -> String? {
             guard let state, !state.isEmpty else { return nil }
             switch state {
+            case "requested": return "已向宿主提交重启请求"
+            case "acknowledged": return "宿主已确认接单"
+            case "completed": return "宿主已回填完成结果"
+            case "failed": return "宿主执行失败"
             case "handled": return "已接收重启请求"
             case "validated": return "已完成重启后校验"
             case "seed": return "演示态"
@@ -779,6 +783,27 @@ final class AppViewModel: ObservableObject {
         }
         if let requestID = runtime.lastRestartRequestID, !requestID.isEmpty {
             parts.append("请求号：\(requestID)")
+        }
+        if let ack = runtime.supervisorAck {
+            switch ack.status {
+            case "requested":
+                parts.append("宿主回执：已收到请求")
+            case "acknowledged":
+                parts.append("宿主回执：已确认执行")
+            case "completed":
+                parts.append("宿主回执：已回填完成")
+            case "failed":
+                parts.append("宿主回执：执行失败")
+            case "missing":
+                parts.append("宿主回执：等待回填")
+            case "invalid":
+                parts.append("宿主回执：回执异常")
+            default:
+                parts.append("宿主回执：\(ack.status)")
+            }
+            if let target = ack.target, !target.isEmpty {
+                parts.append("执行器：\(target)")
+            }
         }
         if let handledAt = runtime.lastRestartHandledAt, !handledAt.isEmpty {
             parts.append("最近处理：\(handledAt)")

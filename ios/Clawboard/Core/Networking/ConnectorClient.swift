@@ -479,6 +479,26 @@ private struct BridgeAlertSummary: Decodable {
 }
 
 struct RuntimeStatusDiagnostics: Decodable, Equatable {
+    struct SupervisorAck: Decodable, Equatable {
+        let source: String?
+        let status: String
+        let target: String?
+        let requestID: String?
+        let requestedAt: String?
+        let requestedBy: String?
+        let result: String?
+        let evidence: String?
+        let updatedAt: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case source, status, target, result, evidence
+            case requestID = "request_id"
+            case requestedAt = "requested_at"
+            case requestedBy = "requested_by"
+            case updatedAt = "updated_at"
+        }
+    }
+
     let status: String
     let source: String?
     let lastRestartRequestedAt: String?
@@ -488,6 +508,7 @@ struct RuntimeStatusDiagnostics: Decodable, Equatable {
     let restartExecutionState: String?
     let restartResult: String?
     let restartEvidence: String?
+    let supervisorAck: SupervisorAck?
     let error: String?
 
     private enum CodingKeys: String, CodingKey {
@@ -499,6 +520,7 @@ struct RuntimeStatusDiagnostics: Decodable, Equatable {
         case restartExecutionState = "restart_execution_state"
         case restartResult = "restart_result"
         case restartEvidence = "restart_evidence"
+        case supervisorAck = "supervisor_ack"
     }
 }
 
