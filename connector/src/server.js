@@ -72,7 +72,8 @@ function summarizeRestartAction(action) {
       return {
         type: 'supervisor_hint',
         target: action.target || null,
-        description: '通过 profile 提示由宿主 supervisor 执行受控重启'
+        ack_file: action.ack_file || null,
+        description: '通过 profile 提示由宿主 supervisor 执行受控重启，并可回填受控 ack/result 文件'
       };
     case 'none':
       return {
@@ -910,12 +911,32 @@ function requestProfileRestart(reason, lobster, task) {
     }
 
     if (action.type === 'supervisor_hint') {
+      let ackFile = null;
+      if (action.ack_file) {
+        ackFile = path.isAbsolute(action.ack_file) ? action.ack_file : path.resolve(process.cwd(), action.ack_file);
+        fs.mkdirSync(path.dirname(ackFile), { recursive: true });
+        fs.writeFileSync(ackFile, JSON.stringify({
+          status: 'requested',
+          request_id: requestPayload.request_id,
+          requested_at: requestedAt,
+          requested_by: requestPayload.requested_by,
+          runtime_profile: requestPayload.runtime_profile,
+          target: action.target || null,
+          lobster_id: requestPayload.lobster_id,
+          task_id: requestPayload.task_id,
+          result: null,
+          evidence: `supervisor_hint_requested:${action.target || 'default'}`
+        }, null, 2));
+      }
       return {
         ok: true,
         action: summarizeRestartAction(action),
         requested_at: requestedAt,
-        evidence: `supervisor_hint_declared:${action.target || 'default'}`,
-        request_id: requestPayload.request_id
+        evidence: ackFile
+          ? `supervisor_hint_requested:${action.target || 'default'}:ack_file=${ackFile}`
+          : `supervisor_hint_declared:${action.target || 'default'}`,
+        request_id: requestPayload.request_id,
+        ack_file: ackFile
       };
     }
   } catch (error) {

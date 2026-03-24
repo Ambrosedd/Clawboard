@@ -56,9 +56,11 @@ bash scripts/show-connection.sh
 
 其中 `restart_action` 当前支持：
 - `signal_file`：写入受限重启标记文件
-- `supervisor_hint`：声明应由宿主 supervisor / container runtime 执行受控重启
+- `supervisor_hint`：声明应由宿主 supervisor / container runtime 执行受控重启，并可选写入 `ack_file`
 - `none`：当前 profile 不支持 restart
 
+`supervisor_hint` 若配置了 `ack_file`，bridge 在发起 restart 请求时会先写入一个受控 JSON 请求/回执文件，供本地 supervisor / container runtime 读取并回填结果。这样可以让 App / diagnostics 看到“已请求 / 已确认 / 已回填”的状态链路，而不把任意宿主管理能力直接塞进 bridge。
+
 注意：
-- `supervisor_hint` 目前只作为能力声明与状态回传，不会让 bridge 直接获得任意宿主管理权限
+- `supervisor_hint` 仍然不是 bridge 直接执行宿主命令；它只负责声明、请求落点、结果回填
 - bridge 仍然遵守窄边界，不提供任意 shell / 任意远程管理能力

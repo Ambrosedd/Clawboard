@@ -43,13 +43,15 @@
     "container": {
       "restart_action": {
         "type": "supervisor_hint",
-        "target": "container_runtime"
+        "target": "container_runtime",
+        "ack_file": "./runtime/restart-ack.container.json"
       }
     },
     "supervised": {
       "restart_action": {
         "type": "supervisor_hint",
-        "target": "host_supervisor"
+        "target": "host_supervisor",
+        "ack_file": "./runtime/restart-ack.supervised.json"
       }
     }
   }
