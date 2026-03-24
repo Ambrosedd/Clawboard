@@ -1,6 +1,7 @@
 {
   "profile_id": "legacy",
   "profile_title": "Legacy Lobster",
+  "runtime_profile": "legacy",
   "supports": {
     "directory_access": true,
     "command_alias": true,
@@ -31,5 +32,25 @@
   "restart_action": {
     "type": "signal_file",
     "path": "./runtime/restart-requested.flag"
+  },
+  "profile_variants": {
+    "legacy": {
+      "restart_action": {
+        "type": "signal_file",
+        "path": "./runtime/restart-requested.flag"
+      }
+    },
+    "container": {
+      "restart_action": {
+        "type": "supervisor_hint",
+        "target": "container_runtime"
+      }
+    },
+    "supervised": {
+      "restart_action": {
+        "type": "supervisor_hint",
+        "target": "host_supervisor"
+      }
+    }
   }
 }

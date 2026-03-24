@@ -15,43 +15,98 @@ const CAPABILITY_LEASES_FILE = process.env.CAPABILITY_LEASES_FILE || '';
 const RESTART_SIGNAL_FILE = process.env.RESTART_SIGNAL_FILE || '';
 const TOKENS_FILE = process.env.TOKENS_FILE || '';
 
+function defaultPermissionProfile() {
+  return {
+    profile_id: PERMISSION_PROFILE,
+    profile_title: 'Default Legacy Profile',
+    runtime_profile: 'legacy',
+    supports: {
+      directory_access: true,
+      command_alias: true,
+      restart: true
+    },
+    directory_policy: {
+      mode: 'allowlist-prefix',
+      allowed_prefixes: ['/tmp', '/var/tmp', '/data/releases']
+    },
+    command_aliases: {
+      git_status: { title: 'Git 状态检查', command_preview: 'git status --short' },
+      release_build: { title: 'Release 构建', command_preview: 'npm run build' },
+      restart_worker: { title: '重启 Worker', command_preview: 'systemctl restart lobster-worker' }
+    },
+    restart_action: RESTART_SIGNAL_FILE ? { type: 'signal_file', path: RESTART_SIGNAL_FILE } : null
+  };
+}
+
+function normalizePermissionProfile(profile) {
+  const base = defaultPermissionProfile();
+  const merged = {
+    ...base,
+    ...(profile || {}),
+    supports: { ...base.supports, ...((profile && profile.supports) || {}) },
+    directory_policy: { ...base.directory_policy, ...((profile && profile.directory_policy) || {}) },
+    command_aliases: { ...base.command_aliases, ...((profile && profile.command_aliases) || {}) }
+  };
+
+  if (!merged.runtime_profile) {
+    merged.runtime_profile = merged.profile_id || 'legacy';
+  }
+
+  if (!merged.restart_action && RESTART_SIGNAL_FILE) {
+    merged.restart_action = { type: 'signal_file', path: RESTART_SIGNAL_FILE };
+  }
+
+  return merged;
+}
+
+function summarizeRestartAction(action) {
+  if (!action || !action.type) return null;
+  switch (action.type) {
+    case 'signal_file':
+      return {
+        type: 'signal_file',
+        path: action.path || null,
+        description: '通过受限 signal file 请求 runtime/supervisor 重启'
+      };
+    case 'supervisor_hint':
+      return {
+        type: 'supervisor_hint',
+        target: action.target || null,
+        description: '通过 profile 提示由宿主 supervisor 执行受控重启'
+      };
+    case 'none':
+      return {
+        type: 'none',
+        description: '当前 profile 不提供 restart 动作'
+      };
+    default:
+      return {
+        type: action.type,
+        description: '未知 restart action，仅做声明不直接执行'
+      };
+  }
+}
+
 function loadPermissionProfile() {
   if (!PERMISSION_PROFILE_PATH) {
-    return {
-      profile_id: PERMISSION_PROFILE,
-      profile_title: 'Default Legacy Profile',
-      supports: {
-        directory_access: true,
-        command_alias: true,
-        restart: true
-      },
-      directory_policy: {
-        mode: 'allowlist-prefix',
-        allowed_prefixes: ['/tmp', '/var/tmp', '/data/releases']
-      },
-      command_aliases: {
-        git_status: { title: 'Git 状态检查', command_preview: 'git status --short' },
-        release_build: { title: 'Release 构建', command_preview: 'npm run build' },
-        restart_worker: { title: '重启 Worker', command_preview: 'systemctl restart lobster-worker' }
-      },
-      restart_action: RESTART_SIGNAL_FILE ? { type: 'signal_file', path: RESTART_SIGNAL_FILE } : null
-    };
+    return normalizePermissionProfile(defaultPermissionProfile());
   }
 
   try {
     const raw = fs.readFileSync(PERMISSION_PROFILE_PATH, 'utf8');
     const parsed = JSON.parse(raw);
-    return parsed;
+    return normalizePermissionProfile(parsed);
   } catch (error) {
     console.warn(`Failed to load permission profile from ${PERMISSION_PROFILE_PATH}: ${error.message}`);
-    return {
+    return normalizePermissionProfile({
       profile_id: PERMISSION_PROFILE,
       profile_title: 'Fallback Profile',
+      runtime_profile: 'fallback',
       supports: { directory_access: true, command_alias: false, restart: false },
       directory_policy: { mode: 'allowlist-prefix', allowed_prefixes: ['/tmp'] },
       command_aliases: {},
-      restart_action: null
-    };
+      restart_action: { type: 'none' }
+    });
   }
 }
 
@@ -63,7 +118,8 @@ const deviceInfo = {
   platform: process.env.PLATFORM || process.platform,
   connector_version: VERSION,
   network_mode: process.env.NETWORK_MODE || 'direct',
-  permission_profile: permissionProfile.profile_id || PERMISSION_PROFILE
+  permission_profile: permissionProfile.profile_id || PERMISSION_PROFILE,
+  runtime_profile: permissionProfile.runtime_profile || permissionProfile.profile_id || PERMISSION_PROFILE
 };
 
 const capabilityLeases = [];
@@ -816,36 +872,96 @@ function appendLobsterLog(lobster, message) {
 
 function requestProfileRestart(reason, lobster, task) {
   const action = permissionProfile.restart_action;
-  if (!action) return false;
+  if (!action || action.type === 'none') {
+    return { ok: false, action: summarizeRestartAction(action), requested_at: null, evidence: 'restart_not_supported' };
+  }
+
+  const requestedAt = isoNow();
+  const requestPayload = {
+    request_id: `restart-${Date.now()}`,
+    reason,
+    time: requestedAt,
+    requested_by: 'connector',
+    runtime_profile: permissionProfile.runtime_profile || permissionProfile.profile_id || 'legacy',
+    lobster_id: lobster?.id || null,
+    task_id: task?.id || null
+  };
+
   try {
     if (action.type === 'signal_file' && action.path) {
       const resolved = path.isAbsolute(action.path) ? action.path : path.resolve(process.cwd(), action.path);
       fs.mkdirSync(path.dirname(resolved), { recursive: true });
-      fs.writeFileSync(resolved, JSON.stringify({ reason, time: isoNow(), lobster_id: lobster?.id || null, task_id: task?.id || null }, null, 2));
-      return true;
+      fs.writeFileSync(resolved, JSON.stringify(requestPayload, null, 2));
+      return {
+        ok: true,
+        action: summarizeRestartAction(action),
+        requested_at: requestedAt,
+        evidence: `signal_file_written:${resolved}`,
+        request_id: requestPayload.request_id
+      };
+    }
+
+    if (action.type === 'supervisor_hint') {
+      return {
+        ok: true,
+        action: summarizeRestartAction(action),
+        requested_at: requestedAt,
+        evidence: `supervisor_hint_declared:${action.target || 'default'}`,
+        request_id: requestPayload.request_id
+      };
     }
   } catch (error) {
     console.warn(`Failed to request restart action: ${error.message}`);
+    return {
+      ok: false,
+      action: summarizeRestartAction(action),
+      requested_at: requestedAt,
+      evidence: `restart_request_failed:${error.message}`,
+      request_id: requestPayload.request_id,
+      error: error.message
+    };
   }
-  return false;
+
+  return {
+    ok: false,
+    action: summarizeRestartAction(action),
+    requested_at: requestedAt,
+    evidence: `restart_action_unhandled:${action.type}`
+  };
 }
 
 function restartLobsterRuntime(lobster, task, reason = 'restart_requested') {
-  if (!lobster) return;
+  if (!lobster) return null;
   const restartIssued = requestProfileRestart(reason, lobster, task);
-  lobster.status = 'busy';
+  lobster.status = restartIssued.ok ? 'busy' : 'error';
   lobster.last_active_at = isoNow();
-  appendLobsterLog(lobster, restartIssued ? `runtime restart requested via profile (${reason})` : `runtime restarted via bridge (${reason})`);
+  appendLobsterLog(
+    lobster,
+    restartIssued.ok
+      ? `runtime restart requested via profile (${reason})`
+      : `runtime restart request failed (${reason}): ${restartIssued.evidence || restartIssued.error || 'unknown'}`
+  );
   if (task) {
-    task.status = 'running';
+    task.status = restartIssued.ok ? 'running' : 'failed';
     task.current_step = 'restart_runtime';
-    task.timeline.push({ step: 'restart_runtime', status: 'done' });
+    task.progress = Math.max(task.progress || 0, restartIssued.ok ? 84 : 0);
+    task.timeline.push({
+      step: 'restart_runtime',
+      status: restartIssued.ok ? 'done' : 'failed',
+      at: isoNow(),
+      note: restartIssued.evidence || null
+    });
+    task.output_summary = restartIssued.evidence || task.output_summary;
+    if (!restartIssued.ok) {
+      task.error_reason = restartIssued.error || 'restart_request_failed';
+    }
   }
   publishEvent('lobster.status.changed', {
     lobster_id: lobster.id,
     status: lobster.status,
     task_id: task?.id || null,
-    action: 'restart'
+    action: 'restart',
+    restart_request: restartIssued
   });
   if (task) {
     publishEvent('task.progress.updated', {
@@ -853,9 +969,11 @@ function restartLobsterRuntime(lobster, task, reason = 'restart_requested') {
       status: task.status,
       progress: task.progress,
       current_step: task.current_step,
-      source: reason
+      source: reason,
+      restart_request: restartIssued
     });
   }
+  return restartIssued;
 }
 
 function lobsterDetail(lobster) {
@@ -1044,7 +1162,9 @@ async function handler(req, res) {
       supported_command_aliases: Object.entries(commandAliases).map(([id, item]) => ({ id, ...item })),
       directory_policy: permissionProfile.directory_policy || null,
       active_capability_leases: currentCapabilityLeases(),
-      runtime_status: readRuntimeStatus()
+      runtime_status: readRuntimeStatus(),
+      restart_action: summarizeRestartAction(permissionProfile.restart_action),
+      runtime_profile: permissionProfile.runtime_profile || null
     });
   }
 
@@ -1411,8 +1531,8 @@ async function handler(req, res) {
     const lobster = getLobsterById(params.id);
     if (!lobster) return notFound(res, 'lobster');
     const task = state.tasks.find(item => item.lobster_id === lobster.id && ['running', 'waiting_approval', 'paused', 'failed'].includes(item.status)) || null;
-    restartLobsterRuntime(lobster, task, 'operator_restart');
-    return sendJson(res, 200, controlResponse('restart', lobster.id));
+    const restartRequest = restartLobsterRuntime(lobster, task, 'operator_restart');
+    return sendJson(res, restartRequest?.ok ? 200 : 409, controlResponse('restart', lobster.id, { restart_request: restartRequest }));
   }
 
   if (req.method === 'GET' && pathname === '/alerts') {

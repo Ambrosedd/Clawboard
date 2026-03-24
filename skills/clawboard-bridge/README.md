@@ -20,7 +20,7 @@
 ## 目录约定
 
 - `config/bridge.env` — 本地配置
-- `config/permission-profile.json` — 龙虾权限档位与白名单配置
+- `config/permission-profile.json` — 龙虾权限档位、runtime profile 与重启动作配置
 - `runtime/connector/` — Bridge 运行时
 - `runtime/runtime-state.json` — runtime adapter 输出的真实状态快照
 - `runtime/auth-tokens.json` — 已签发 token 的持久化文件
@@ -46,3 +46,19 @@ bash scripts/show-connection.sh
 然后把输出的 HTTPS 连接串发给手机，在 Clawboard App 里“添加龙虾”。
 
 如果只是同局域网内调试，也可以不启 tunnel，直接使用本地/局域网地址。
+
+## Runtime profile 提示
+
+当前 bridge 支持在 permission profile 中声明：
+
+- `runtime_profile`
+- `restart_action`
+
+其中 `restart_action` 当前支持：
+- `signal_file`：写入受限重启标记文件
+- `supervisor_hint`：声明应由宿主 supervisor / container runtime 执行受控重启
+- `none`：当前 profile 不支持 restart
+
+注意：
+- `supervisor_hint` 目前只作为能力声明与状态回传，不会让 bridge 直接获得任意宿主管理权限
+- bridge 仍然遵守窄边界，不提供任意 shell / 任意远程管理能力
