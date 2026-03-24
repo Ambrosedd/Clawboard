@@ -649,6 +649,10 @@ final class AppViewModel: ObservableObject {
         let target = data["target"]?.stringValue
         let result = data["result"]?.stringValue
         let requestID = data["request_id"]?.stringValue
+        let lobsterID = data["lobster_id"]?.stringValue
+        let taskID = data["task_id"]?.stringValue
+
+        applyRuntimeAckEvent(status: status, target: target, result: result, lobsterID: lobsterID, taskID: taskID)
 
         var parts: [String] = ["Runtime：状态同步中"]
         switch status {
@@ -706,6 +710,47 @@ final class AppViewModel: ObservableObject {
             toastMessage = issue == .realtimeDisconnected ? "实时同步暂时中断：\(eventName) 后刷新失败" : issue.toastMessage
             if issue != .unauthorized {
                 scheduleRealtimeReconnect(reason: issue)
+            }
+        }
+    }
+
+    private func applyRuntimeAckEvent(status: String?, target: String?, result: String?, lobsterID: String?, taskID: String?) {
+        if let taskID, let index = tasks.firstIndex(where: { $0.id == taskID }) {
+            switch status {
+            case "requested":
+                tasks[index].currentStep = "已向 \(target ?? "宿主执行器") 提交重启请求"
+            case "acknowledged":
+                tasks[index].status = "running"
+                tasks[index].currentStep = "宿主已确认执行重启"
+            case "completed":
+                tasks[index].status = "running"
+                tasks[index].currentStep = result == "success" ? "宿主已完成重启并恢复执行" : "宿主已回填完成结果"
+            case "failed":
+                tasks[index].status = "failed"
+                tasks[index].currentStep = "宿主重启失败，等待处理"
+            default:
+                break
+            }
+        }
+
+        if let lobsterID, let index = lobsters.firstIndex(where: { $0.id == lobsterID }) {
+            switch status {
+            case "requested":
+                lobsters[index].status = "待审批"
+                lobsters[index].lastActiveAt = "刚刚"
+            case "acknowledged":
+                lobsters[index].status = "运行中"
+                lobsters[index].lastActiveAt = "刚刚"
+            case "completed":
+                lobsters[index].status = "运行中"
+                lobsters[index].taskTitle = result == "success" ? "重启已完成，等待状态收敛" : lobsters[index].taskTitle
+                lobsters[index].lastActiveAt = "刚刚"
+            case "failed":
+                lobsters[index].status = "异常"
+                lobsters[index].taskTitle = "重启失败，请检查执行器回执"
+                lobsters[index].lastActiveAt = "刚刚"
+            default:
+                break
             }
         }
     }
