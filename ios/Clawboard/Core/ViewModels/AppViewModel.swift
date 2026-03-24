@@ -39,6 +39,14 @@ enum BridgeConnectionIssue: Equatable {
     }
 }
 
+private enum BuildFlavor {
+    #if DEBUG
+    static let allowsDemoMode = true
+    #else
+    static let allowsDemoMode = false
+    #endif
+}
+
 @MainActor
 final class AppViewModel: ObservableObject {
     @Published private(set) var lobsters: [LobsterSummary] = []
@@ -73,6 +81,7 @@ final class AppViewModel: ObservableObject {
     private var lastBridgeEventID: String?
     private var realtimeReconnectAttempt = 0
     private var lastFullRefreshAt: Date?
+    private var lastAckRefreshAt: Date?
 
     deinit {
         autoplayTask?.cancel()
@@ -105,13 +114,16 @@ final class AppViewModel: ObservableObject {
 
         loadPhase = .restoring
 
-        if let persisted {
+        if let persisted, BuildFlavor.allowsDemoMode {
             selectedScenario = persisted.scenario
             apply(snapshot: persisted.snapshot)
             hasLoadedOnce = true
             lastSavedAt = persisted.savedAt
             bridgeConnectionSummary = persisted.bridgeConnectionSummary
             demoAutoplayEnabled = persisted.autoplayEnabled
+        } else {
+            selectedScenario = .normal
+            demoAutoplayEnabled = false
         }
 
         if let credentialRecord {
@@ -122,9 +134,17 @@ final class AppViewModel: ObservableObject {
             startEventStreamIfNeeded()
         }
 
+        if bridgeConnection == nil, !BuildFlavor.allowsDemoMode {
+            clearData()
+            hasLoadedOnce = false
+            lastSavedAt = nil
+        }
+
         loadPhase = .loaded
         startAutoplayIfNeeded()
-        toastMessage = bridgeConnection == nil ? "已恢复上次演示状态" : "已恢复上次 Bridge 连接状态"
+        toastMessage = bridgeConnection == nil
+            ? (BuildFlavor.allowsDemoMode ? "已恢复上次演示状态" : nil)
+            : "已恢复上次 Bridge 连接状态"
     }
 
     func load(force: Bool = false) async {
@@ -164,7 +184,7 @@ final class AppViewModel: ObservableObject {
                     stopEventStream()
                 }
             } else {
-                loadPhase = .failed("暂时无法连接 Bridge / Demo 数据源，你可以稍后重试。")
+                loadPhase = .failed(BuildFlavor.allowsDemoMode ? "暂时无法连接 Bridge / Demo 数据源，你可以稍后重试。" : "暂时无法连接 Bridge，请稍后重试。")
                 toastMessage = "加载数据失败"
             }
             print("Failed to load app data: \(error)")
@@ -533,11 +553,15 @@ final class AppViewModel: ObservableObject {
     }
 
     private func persistCurrentState() {
+        guard BuildFlavor.allowsDemoMode || bridgeConnectionSummary != nil else {
+            lastSavedAt = nil
+            return
+        }
         let persisted = PersistedAppState(
-            scenario: selectedScenario,
+            scenario: BuildFlavor.allowsDemoMode ? selectedScenario : .normal,
             snapshot: currentSnapshot,
             savedAt: Date(),
-            autoplayEnabled: demoAutoplayEnabled,
+            autoplayEnabled: BuildFlavor.allowsDemoMode ? demoAutoplayEnabled : false,
             bridgeConnectionSummary: bridgeConnectionSummary
         )
         stateStore.save(persisted)
@@ -546,7 +570,7 @@ final class AppViewModel: ObservableObject {
 
     private func startAutoplayIfNeeded() {
         stopAutoplay()
-        guard bridgeConnection == nil, demoAutoplayEnabled, selectedScenario == .normal, loadPhase == .loaded else { return }
+        guard BuildFlavor.allowsDemoMode, bridgeConnection == nil, demoAutoplayEnabled, selectedScenario == .normal, loadPhase == .loaded else { return }
 
         autoplayTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -600,6 +624,8 @@ final class AppViewModel: ObservableObject {
         }
 
         switch event.name {
+        case "runtime.restart.ack.updated":
+            handleRuntimeAckEvent(event)
         case "bridge.started", "pair.exchanged", "auth.revoked", "lobster.status.changed", "task.progress.updated", "task.failed", "approval.resolved", "alert.created":
             scheduleRefreshFromRealtimeEvent(named: event.name)
         default:
@@ -613,6 +639,54 @@ final class AppViewModel: ObservableObject {
             try? await Task.sleep(for: .milliseconds(350))
             guard let self, !Task.isCancelled else { return }
             await self.refreshFromRealtimeEvent(named: eventName)
+        }
+    }
+
+    private func handleRuntimeAckEvent(_ event: BridgeEvent) {
+        guard let data = event.envelope?.data else { return }
+
+        let status = data["status"]?.stringValue
+        let target = data["target"]?.stringValue
+        let result = data["result"]?.stringValue
+        let requestID = data["request_id"]?.stringValue
+
+        var parts: [String] = ["Runtime：状态同步中"]
+        switch status {
+        case "requested":
+            parts.append("已向宿主提交重启请求")
+            parts.append("宿主回执：已收到请求")
+        case "acknowledged":
+            parts.append("宿主已确认接单")
+            parts.append("宿主回执：已确认执行")
+        case "completed":
+            parts.append("宿主已回填完成结果")
+            parts.append("宿主回执：已回填完成")
+        case "failed":
+            parts.append("宿主执行失败")
+            parts.append("宿主回执：执行失败")
+        default:
+            if let status, !status.isEmpty {
+                parts.append("宿主回执：\(status)")
+            }
+        }
+        if let result, !result.isEmpty {
+            parts.append("结果：\(result == "success" ? "成功" : (result == "error" ? "失败" : result))")
+        }
+        if let target, !target.isEmpty {
+            parts.append("执行器：\(target)")
+        }
+        if let requestID, !requestID.isEmpty {
+            parts.append("请求号：\(requestID)")
+        }
+        runtimeStatusSummary = parts.joined(separator: " · ")
+
+        let now = Date()
+        let shouldRefresh = lastAckRefreshAt.map { now.timeIntervalSince($0) > 1.5 } ?? true
+        guard shouldRefresh else { return }
+        lastAckRefreshAt = now
+        Task { [weak self] in
+            guard let self else { return }
+            await self.refreshCapabilityMetadata()
         }
     }
 
@@ -829,7 +903,7 @@ final class AppViewModel: ObservableObject {
     }
 
     private func advanceDemoStateIfNeeded() {
-        guard bridgeConnection == nil, selectedScenario == .normal, loadPhase == .loaded else { return }
+        guard BuildFlavor.allowsDemoMode, bridgeConnection == nil, selectedScenario == .normal, loadPhase == .loaded else { return }
 
         if let waitingIndex = tasks.firstIndex(where: { $0.status == "waiting_approval" }) {
             let waitingTask = tasks[waitingIndex]

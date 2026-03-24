@@ -289,6 +289,14 @@ enum DemoScenario: String, CaseIterable, Identifiable, Codable {
     case empty = "empty"
     case error = "error"
 
+    static var availableCases: [DemoScenario] {
+        #if DEBUG
+        return Self.allCases
+        #else
+        return [.normal]
+        #endif
+    }
+
     var id: String { rawValue }
 
     var title: String {

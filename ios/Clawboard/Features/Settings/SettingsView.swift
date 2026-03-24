@@ -52,7 +52,7 @@ struct SettingsView: View {
                         }
                         .foregroundStyle(AppTheme.danger)
                     } else {
-                        Text("当前未连接真实 Bridge，应用将使用本地 Demo 数据。")
+                        Text("当前未连接真实 Bridge。")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -60,9 +60,10 @@ struct SettingsView: View {
                     Label("节点管理", systemImage: "desktopcomputer")
                 }
 
+                #if DEBUG
                 Section("演示模式") {
                     Picker("场景", selection: $viewModel.selectedScenario) {
-                        ForEach(DemoScenario.allCases) { scenario in
+                        ForEach(DemoScenario.availableCases) { scenario in
                             Text(scenario.title).tag(scenario)
                         }
                     }
@@ -97,6 +98,7 @@ struct SettingsView: View {
                     }
                     .foregroundStyle(AppTheme.danger)
                 }
+                #endif
 
                 Section("节点健康") {
                     if viewModel.nodes.isEmpty {

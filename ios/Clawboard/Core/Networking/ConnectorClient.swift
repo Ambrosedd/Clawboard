@@ -65,6 +65,7 @@ final class ConnectorClient {
             return try await fetchSnapshotFromBridge(bridgeConnection)
         }
 
+        #if DEBUG
         try await Task.sleep(for: .milliseconds(650))
 
         switch scenario {
@@ -75,6 +76,9 @@ final class ConnectorClient {
         case .error:
             throw URLError(.cannotConnectToHost)
         }
+        #else
+        throw ConnectorError.bridgeUnavailable
+        #endif
     }
 
     func fetchPairSession(baseURL: String) async throws -> BridgePairSession {

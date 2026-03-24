@@ -8,7 +8,7 @@ struct DashboardView: View {
             Group {
                 switch viewModel.loadPhase {
                 case .idle, .loading, .restoring:
-                    LoadingStateView(title: "正在同步龙虾状态", subtitle: viewModel.isBridgeConnected ? "正在连接 Bridge、同步节点与任务状态。" : "模拟连接 Bridge、聚合任务与审批数据。")
+                    LoadingStateView(title: "正在同步龙虾状态", subtitle: viewModel.isBridgeConnected ? "正在连接 Bridge、同步节点与任务状态。" : "正在准备本地界面状态。")
                 case .failed(let message):
                     ErrorStateView(title: "首页加载失败", message: message, actionTitle: "重试") {
                         Task { await viewModel.refresh() }
