@@ -310,7 +310,7 @@ final class ConnectorClient {
                 if http.statusCode == 401 || serverError.error.code == "unauthorized" {
                     throw ConnectorError.unauthorized(serverError.diagnostics)
                 }
-                if http.statusCode == 410 || serverError.error.code == "pair_session_expired" {
+                if http.statusCode == 410 || serverError.error.code == "pair_session_expired" || serverError.error.code == "pair_code_invalid" {
                     throw ConnectorError.pairSessionExpired
                 }
                 throw ConnectorError.server(code: serverError.error.code, message: serverError.error.message)

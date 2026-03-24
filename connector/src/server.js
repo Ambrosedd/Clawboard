@@ -788,7 +788,7 @@ function isLocalRequest(req) {
 
 function ensureAuth(req, res) {
   if (req.url.startsWith('/pair/') || req.url.startsWith('/health')) return true;
-  if (req.url.startsWith('/debug/') && isLocalRequest(req)) return true;
+  if (req.method === 'GET' && req.url.startsWith('/debug/diagnostics') && isLocalRequest(req)) return true;
   const token = extractBearerToken(req);
   if (token && getTokenRecord(token)) return true;
   unauthorized(res, getAuthDiagnostics(token));
@@ -1078,7 +1078,12 @@ async function handler(req, res) {
     const activePairing = getActivePairingSession();
 
     if (isExpired(activePairing.expires_at)) {
-      return invalidRequest(res, 'pair code is invalid or expired', 'pair_code_invalid');
+      return sendJson(res, 410, {
+        error: {
+          code: 'pair_session_expired',
+          message: 'pair session has expired, please request a new pairing session'
+        }
+      });
     }
 
     if (body.pair_code !== activePairing.pair_code) {
