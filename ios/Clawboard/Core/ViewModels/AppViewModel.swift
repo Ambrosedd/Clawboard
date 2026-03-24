@@ -1,6 +1,44 @@
 import Foundation
 import SwiftUI
 
+enum BridgeConnectionIssue: Equatable {
+    case bridgeUnavailable
+    case unauthorized
+    case pairSessionExpired
+    case realtimeDisconnected
+    case unknown(String)
+
+    var message: String {
+        switch self {
+        case .bridgeUnavailable:
+            return "Bridge 当前不可达，请检查网络、Tunnel 或服务是否在线"
+        case .unauthorized:
+            return "当前会话已失效，请重新连接这台龙虾"
+        case .pairSessionExpired:
+            return "配对已过期，请重新获取连接串"
+        case .realtimeDisconnected:
+            return "实时同步已中断，正在尝试重连"
+        case .unknown(let message):
+            return message
+        }
+    }
+
+    var toastMessage: String {
+        switch self {
+        case .bridgeUnavailable:
+            return "Bridge 不可达"
+        case .unauthorized:
+            return "会话已失效，请重新连接"
+        case .pairSessionExpired:
+            return "配对已过期"
+        case .realtimeDisconnected:
+            return "实时同步已中断，正在重连"
+        case .unknown(let message):
+            return message
+        }
+    }
+}
+
 @MainActor
 final class AppViewModel: ObservableObject {
     @Published private(set) var lobsters: [LobsterSummary] = []
@@ -20,6 +58,7 @@ final class AppViewModel: ObservableObject {
     @Published private(set) var activeCapabilityLeases: [CapabilityLease] = []
     @Published private(set) var supportedCommandAliases: [CommandAliasOption] = []
     @Published private(set) var permissionProfile: String?
+    @Published private(set) var bridgeIssue: BridgeConnectionIssue?
 
     private let client = ConnectorClient()
     private let eventStreamClient = BridgeEventStreamClient()
@@ -28,12 +67,15 @@ final class AppViewModel: ObservableObject {
     private var autoplayTask: Task<Void, Never>?
     private var eventStreamTask: Task<Void, Never>?
     private var pendingRefreshTask: Task<Void, Never>?
+    private var realtimeReconnectTask: Task<Void, Never>?
     private var lastBridgeEventID: String?
+    private var realtimeReconnectAttempt = 0
 
     deinit {
         autoplayTask?.cancel()
         eventStreamTask?.cancel()
         pendingRefreshTask?.cancel()
+        realtimeReconnectTask?.cancel()
     }
 
     var activeTaskCount: Int {
@@ -73,6 +115,7 @@ final class AppViewModel: ObservableObject {
             bridgeConnection = credentialRecord.connection
             bridgeConnectionSummary = credentialRecord.summary
             selectedScenario = .normal
+            bridgeIssue = nil
             startEventStreamIfNeeded()
         }
 
@@ -89,6 +132,9 @@ final class AppViewModel: ObservableObject {
 
     func refresh() async {
         loadPhase = .loading
+        if bridgeConnection != nil {
+            bridgeIssue = nil
+        }
 
         do {
             let snapshot = try await client.fetchSnapshot(for: selectedScenario, bridgeConnection: bridgeConnection)
@@ -105,8 +151,18 @@ final class AppViewModel: ObservableObject {
         } catch {
             clearData()
             hasLoadedOnce = true
-            loadPhase = .failed(isBridgeConnected ? "暂时无法连接 Bridge，你可以稍后重试。" : "暂时无法连接 Bridge / Demo 数据源，你可以稍后重试。")
-            toastMessage = "加载数据失败"
+            let issue = classifyBridgeIssue(from: error)
+            if bridgeConnection != nil {
+                bridgeIssue = issue
+                loadPhase = .failed(issue.message)
+                toastMessage = issue.toastMessage
+                if case .unauthorized = issue {
+                    stopEventStream()
+                }
+            } else {
+                loadPhase = .failed("暂时无法连接 Bridge / Demo 数据源，你可以稍后重试。")
+                toastMessage = "加载数据失败"
+            }
             print("Failed to load app data: \(error)")
         }
     }
@@ -137,6 +193,8 @@ final class AppViewModel: ObservableObject {
     func pairWithBridge(baseURL: String, pairCode: String) async throws {
         let sanitizedBaseURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let sanitizedPairCode = pairCode.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        bridgeIssue = nil
 
         let session = try await client.fetchPairSession(baseURL: sanitizedBaseURL)
         let exchange = try await client.exchangePairCode(
@@ -188,6 +246,7 @@ final class AppViewModel: ObservableObject {
 
             bridgeConnection = nil
             bridgeConnectionSummary = nil
+            bridgeIssue = nil
             stopEventStream()
             credentialStore.clear()
             hasLoadedOnce = false
@@ -375,6 +434,7 @@ final class AppViewModel: ObservableObject {
         stateStore.clear()
         bridgeConnection = nil
         bridgeConnectionSummary = nil
+        bridgeIssue = nil
         stopEventStream()
         credentialStore.clear()
         selectedScenario = .normal
@@ -495,10 +555,19 @@ final class AppViewModel: ObservableObject {
         guard let bridgeConnection else { return }
 
         isRealtimeSyncActive = true
-        eventStreamTask = eventStreamClient.stream(connection: bridgeConnection, lastEventID: lastBridgeEventID) { [weak self] event in
-            guard let self else { return }
-            await self.handleBridgeEvent(event)
-        }
+        bridgeIssue = nil
+        eventStreamTask = eventStreamClient.stream(
+            connection: bridgeConnection,
+            lastEventID: lastBridgeEventID,
+            onEvent: { [weak self] event in
+                guard let self else { return }
+                await self.handleBridgeEvent(event)
+            },
+            onFailure: { [weak self] failure in
+                guard let self else { return }
+                await self.handleEventStreamFailure(failure)
+            }
+        )
     }
 
     private func stopEventStream() {
@@ -506,7 +575,10 @@ final class AppViewModel: ObservableObject {
         eventStreamTask = nil
         pendingRefreshTask?.cancel()
         pendingRefreshTask = nil
+        realtimeReconnectTask?.cancel()
+        realtimeReconnectTask = nil
         lastBridgeEventID = nil
+        realtimeReconnectAttempt = 0
         isRealtimeSyncActive = false
     }
 
@@ -539,11 +611,107 @@ final class AppViewModel: ObservableObject {
             apply(snapshot: snapshot)
             hasLoadedOnce = true
             loadPhase = .loaded
+            bridgeIssue = nil
             persistCurrentState()
         } catch {
             isRealtimeSyncActive = false
-            toastMessage = "实时同步暂时中断：\(eventName) 后刷新失败"
+            let issue = classifyBridgeIssue(from: error)
+            bridgeIssue = issue
+            toastMessage = issue == .realtimeDisconnected ? "实时同步暂时中断：\(eventName) 后刷新失败" : issue.toastMessage
+            if issue != .unauthorized {
+                scheduleRealtimeReconnect(reason: issue)
+            }
         }
+    }
+
+    func handleScenePhaseChange(_ phase: ScenePhase) {
+        switch phase {
+        case .active:
+            if bridgeConnection != nil {
+                if eventStreamTask == nil {
+                    startEventStreamIfNeeded()
+                } else if !isRealtimeSyncActive {
+                    scheduleRealtimeReconnect(reason: .realtimeDisconnected, resetAttempt: true)
+                }
+            }
+        case .background:
+            eventStreamTask?.cancel()
+            eventStreamTask = nil
+            pendingRefreshTask?.cancel()
+            pendingRefreshTask = nil
+            isRealtimeSyncActive = false
+        default:
+            break
+        }
+    }
+
+    private func handleEventStreamFailure(_ failure: BridgeEventStreamFailure) async {
+        guard bridgeConnection != nil else { return }
+
+        isRealtimeSyncActive = false
+        let issue: BridgeConnectionIssue
+        switch failure {
+        case .unauthorized:
+            issue = .unauthorized
+        case .bridgeUnavailable:
+            issue = .bridgeUnavailable
+        case .invalidResponse:
+            issue = .unknown("Bridge 返回了异常响应，请稍后重试")
+        case .disconnected:
+            issue = .realtimeDisconnected
+        }
+        bridgeIssue = issue
+        toastMessage = issue.toastMessage
+
+        if issue != .unauthorized {
+            scheduleRealtimeReconnect(reason: issue)
+        }
+    }
+
+    private func scheduleRealtimeReconnect(reason: BridgeConnectionIssue, resetAttempt: Bool = false) {
+        guard bridgeConnection != nil else { return }
+        if resetAttempt {
+            realtimeReconnectAttempt = 0
+        }
+        realtimeReconnectTask?.cancel()
+        realtimeReconnectAttempt += 1
+        let attempt = realtimeReconnectAttempt
+        let delaySeconds = min(pow(2.0, Double(max(0, attempt - 1))), 12.0)
+        realtimeReconnectTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delaySeconds))
+            guard let self, !Task.isCancelled, self.bridgeConnection != nil else { return }
+            self.toastMessage = reason == .bridgeUnavailable ? "正在重连 Bridge 实时同步…" : "正在恢复实时同步…"
+            self.startEventStreamIfNeeded()
+            await self.refresh()
+        }
+    }
+
+    private func classifyBridgeIssue(from error: Error) -> BridgeConnectionIssue {
+        if let connectorError = error as? ConnectorError {
+            switch connectorError {
+            case .unauthorized:
+                return .unauthorized
+            case .pairSessionExpired:
+                return .pairSessionExpired
+            case .bridgeUnavailable:
+                return .bridgeUnavailable
+            case .invalidResponse:
+                return .unknown(connectorError.userFacingMessage)
+            case .server(_, let message):
+                return .unknown(message)
+            }
+        }
+
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .cannotConnectToHost, .timedOut, .dnsLookupFailed:
+                return .bridgeUnavailable
+            default:
+                return .unknown(urlError.localizedDescription)
+            }
+        }
+
+        return .unknown(error.localizedDescription)
     }
 
     private func advanceDemoStateIfNeeded() {

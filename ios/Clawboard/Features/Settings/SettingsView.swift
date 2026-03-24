@@ -27,6 +27,12 @@ struct SettingsView: View {
                             Text(viewModel.isRealtimeSyncActive ? "实时事件同步已连接，状态会自动刷新。" : "当前未建立实时事件流，将以手动/操作后刷新为主。")
                                 .font(.caption)
                                 .foregroundStyle(viewModel.isRealtimeSyncActive ? AppTheme.success : .secondary)
+
+                            if let issue = viewModel.bridgeIssue {
+                                Text(issue.message)
+                                    .font(.caption)
+                                    .foregroundStyle(issue == .unauthorized || issue == .pairSessionExpired ? AppTheme.danger : AppTheme.warning)
+                            }
                         }
 
                         Button("断开 Bridge 连接") {

@@ -3,8 +3,8 @@ import UIKit
 
 private let skillBootstrapURL = "https://raw.githubusercontent.com/Ambrosedd/clawboard-install/main/bootstrap-clawboard-bridge.sh"
 private let skillInstallCommand = "curl -fsSL https://raw.githubusercontent.com/Ambrosedd/clawboard-install/main/bootstrap-clawboard-bridge.sh | bash"
-private let skillFollowupCommands = "cd ~/.clawboard/skills/clawboard-bridge\nbash scripts/start-bridge.sh\nbash scripts/show-connection.sh"
-private let skillInstallMessage = "请在你的环境执行下面这条命令安装 Clawboard skill：\n\ncurl -fsSL https://raw.githubusercontent.com/Ambrosedd/clawboard-install/main/bootstrap-clawboard-bridge.sh | bash\n\n安装完成后继续执行：\n\ncd ~/.clawboard/skills/clawboard-bridge\nbash scripts/start-bridge.sh\nbash scripts/show-connection.sh\n\n然后把输出的连接串发回给我。"
+private let skillFollowupCommands = "cd ~/.clawboard/skills/clawboard-bridge\nbash scripts/install-cloudflared.sh\nbash scripts/start-bridge.sh\nbash scripts/start-cloudflare-tunnel.sh\nbash scripts/show-connection.sh"
+private let skillInstallMessage = "请在你的环境执行下面这条命令安装 Clawboard skill：\n\ncurl -fsSL https://raw.githubusercontent.com/Ambrosedd/clawboard-install/main/bootstrap-clawboard-bridge.sh | bash\n\n安装完成后继续执行：\n\ncd ~/.clawboard/skills/clawboard-bridge\nbash scripts/install-cloudflared.sh\nbash scripts/start-bridge.sh\nbash scripts/start-cloudflare-tunnel.sh\nbash scripts/show-connection.sh\n\n然后把输出的连接串发回给我。"
 
 private extension BridgePairSession {
     func pairingLink(baseURL: String) -> String {
@@ -87,8 +87,8 @@ struct PairingFlowView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Label("1. 把完整安装说明发给龙虾", systemImage: "1.circle")
-                    Label("2. 龙虾执行安装并运行 start-bridge.sh / show-connection.sh", systemImage: "2.circle")
-                    Label("3. 把返回的连接串粘贴到这里完成连接", systemImage: "3.circle")
+                    Label("2. 龙虾依次执行 install-cloudflared / start-bridge / start-cloudflare-tunnel / show-connection", systemImage: "2.circle")
+                    Label("3. 把返回的 HTTPS 连接串粘贴到这里完成连接", systemImage: "3.circle")
                 }
                 .font(.subheadline)
 
@@ -221,7 +221,11 @@ struct PairingFlowView: View {
                 connectionText = sessionPreview.pairingLink ?? sessionPreview.pairingLink(baseURL: sessionPreview.bridgeURL ?? bridgeAddress)
             }
         } catch {
-            localError = error.localizedDescription
+            if let connectorError = error as? ConnectorError {
+                localError = connectorError.userFacingMessage
+            } else {
+                localError = error.localizedDescription
+            }
         }
     }
 
@@ -240,7 +244,11 @@ struct PairingFlowView: View {
             }
             dismiss()
         } catch {
-            localError = error.localizedDescription
+            if let connectorError = error as? ConnectorError {
+                localError = connectorError.userFacingMessage
+            } else {
+                localError = error.localizedDescription
+            }
         }
     }
 }

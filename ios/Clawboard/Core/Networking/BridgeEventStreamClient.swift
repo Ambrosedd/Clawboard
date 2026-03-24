@@ -1,5 +1,12 @@
 import Foundation
 
+enum BridgeEventStreamFailure: Error, Equatable {
+    case unauthorized
+    case bridgeUnavailable
+    case invalidResponse
+    case disconnected
+}
+
 struct BridgeEventEnvelope: Decodable, Hashable {
     let time: String
     let data: [String: StringOrIntValue]
@@ -56,7 +63,8 @@ final class BridgeEventStreamClient {
     func stream(
         connection: BridgeConnection,
         lastEventID: String? = nil,
-        onEvent: @escaping @Sendable (BridgeEvent) async -> Void
+        onEvent: @escaping @Sendable (BridgeEvent) async -> Void,
+        onFailure: @escaping @Sendable (BridgeEventStreamFailure) async -> Void
     ) -> Task<Void, Never> {
         Task.detached(priority: .background) { [session] in
             do {
@@ -64,13 +72,24 @@ final class BridgeEventStreamClient {
                 request.timeoutInterval = 86_400
                 let (bytes, response) = try await session.bytes(for: request)
 
-                guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                guard let http = response as? HTTPURLResponse else {
+                    await onFailure(.invalidResponse)
+                    return
+                }
+
+                guard (200..<300).contains(http.statusCode) else {
+                    if http.statusCode == 401 {
+                        await onFailure(.unauthorized)
+                    } else {
+                        await onFailure(.bridgeUnavailable)
+                    }
                     return
                 }
 
                 var currentID: String?
                 var currentEvent = "message"
                 var dataBuffer: [String] = []
+                var sawAnyEvent = false
 
                 for try await line in bytes.lines {
                     if Task.isCancelled { return }
@@ -79,6 +98,7 @@ final class BridgeEventStreamClient {
                         if !dataBuffer.isEmpty {
                             let dataString = dataBuffer.joined(separator: "\n")
                             let envelope = try? JSONDecoder().decode(BridgeEventEnvelope.self, from: Data(dataString.utf8))
+                            sawAnyEvent = true
                             await onEvent(BridgeEvent(id: currentID, name: currentEvent, envelope: envelope))
                         }
                         currentID = nil
@@ -105,8 +125,22 @@ final class BridgeEventStreamClient {
                         dataBuffer.append(String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces))
                     }
                 }
+
+                if !Task.isCancelled {
+                    await onFailure(sawAnyEvent ? .disconnected : .bridgeUnavailable)
+                }
             } catch {
-                return
+                guard !Task.isCancelled else { return }
+                if let urlError = error as? URLError {
+                    switch urlError.code {
+                    case .notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .cannotConnectToHost, .timedOut, .dnsLookupFailed, .resourceUnavailable:
+                        await onFailure(.bridgeUnavailable)
+                    default:
+                        await onFailure(.disconnected)
+                    }
+                    return
+                }
+                await onFailure(.disconnected)
             }
         }
     }

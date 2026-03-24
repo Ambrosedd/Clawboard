@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct RootTabView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel = AppViewModel()
 
     var body: some View {
@@ -35,6 +36,9 @@ struct RootTabView: View {
         .task {
             viewModel.restoreIfPossible()
             await viewModel.load()
+        }
+        .onChange(of: scenePhase) { _, newValue in
+            viewModel.handleScenePhaseChange(newValue)
         }
         .overlay(alignment: .top) {
             if let toast = viewModel.toastMessage {

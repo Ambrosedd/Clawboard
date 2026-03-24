@@ -1,5 +1,46 @@
 import Foundation
 
+enum ConnectorError: LocalizedError, Equatable {
+    case unauthorized
+    case pairSessionExpired
+    case bridgeUnavailable
+    case invalidResponse
+    case server(code: String, message: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .unauthorized:
+            return "当前会话已失效，请重新连接 Bridge"
+        case .pairSessionExpired:
+            return "配对会话已过期，请重新获取配对信息"
+        case .bridgeUnavailable:
+            return "暂时无法连接 Bridge，请检查网络、Tunnel 或服务状态"
+        case .invalidResponse:
+            return "Bridge 返回了无法识别的响应"
+        case .server(_, let message):
+            return message
+        }
+    }
+
+    var userFacingMessage: String {
+        switch self {
+        case .unauthorized:
+            return "当前会话已失效，请重新连接"
+        case .pairSessionExpired:
+            return "配对已过期，请重新获取连接串"
+        case .bridgeUnavailable:
+            return "Bridge 当前不可达，请检查网络或 Tunnel"
+        case .invalidResponse:
+            return "Bridge 返回了异常响应，请稍后重试"
+        case .server(let code, let message):
+            if code == "unauthorized" {
+                return "当前会话已失效，请重新连接"
+            }
+            return message
+        }
+    }
+}
+
 final class ConnectorClient {
     private let session: URLSession
 
@@ -26,9 +67,13 @@ final class ConnectorClient {
 
     func fetchPairSession(baseURL: String) async throws -> BridgePairSession {
         let request = try makeRequest(baseURL: baseURL, path: "/pair/session")
-        let (data, response) = try await session.data(for: request)
-        try validate(response: response, data: data)
-        return try JSONDecoder().decode(BridgePairSession.self, from: data)
+        do {
+            let (data, response) = try await session.data(for: request)
+            try validate(response: response, data: data)
+            return try JSONDecoder().decode(BridgePairSession.self, from: data)
+        } catch {
+            throw mapNetworkError(error)
+        }
     }
 
     func exchangePairCode(baseURL: String, payload: BridgePairExchangeRequest) async throws -> BridgePairExchangeResponse {
@@ -36,17 +81,25 @@ final class ConnectorClient {
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(payload)
-        let (data, response) = try await session.data(for: request)
-        try validate(response: response, data: data)
-        return try JSONDecoder().decode(BridgePairExchangeResponse.self, from: data)
+        do {
+            let (data, response) = try await session.data(for: request)
+            try validate(response: response, data: data)
+            return try JSONDecoder().decode(BridgePairExchangeResponse.self, from: data)
+        } catch {
+            throw mapNetworkError(error)
+        }
     }
 
     func revokeCurrentToken(_ bridgeConnection: BridgeConnection) async throws {
         var request = try makeRequest(baseURL: bridgeConnection.baseURL, path: "/auth/revoke")
         request.httpMethod = "POST"
         request.addValue("Bearer \(bridgeConnection.token)", forHTTPHeaderField: "Authorization")
-        let (data, response) = try await session.data(for: request)
-        try validate(response: response, data: data)
+        do {
+            let (data, response) = try await session.data(for: request)
+            try validate(response: response, data: data)
+        } catch {
+            throw mapNetworkError(error)
+        }
     }
 
     func approve(
@@ -186,9 +239,13 @@ final class ConnectorClient {
     private func fetchAuthorized<T: Decodable>(_ bridgeConnection: BridgeConnection, path: String) async throws -> T {
         var request = try makeRequest(baseURL: bridgeConnection.baseURL, path: path)
         request.addValue("Bearer \(bridgeConnection.token)", forHTTPHeaderField: "Authorization")
-        let (data, response) = try await session.data(for: request)
-        try validate(response: response, data: data)
-        return try JSONDecoder().decode(T.self, from: data)
+        do {
+            let (data, response) = try await session.data(for: request)
+            try validate(response: response, data: data)
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            throw mapNetworkError(error)
+        }
     }
 
     private func sendAuthorized<T: Encodable>(_ bridgeConnection: BridgeConnection, path: String, method: String, body: T) async throws {
@@ -197,16 +254,24 @@ final class ConnectorClient {
         request.addValue("Bearer \(bridgeConnection.token)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
-        let (data, response) = try await session.data(for: request)
-        try validate(response: response, data: data)
+        do {
+            let (data, response) = try await session.data(for: request)
+            try validate(response: response, data: data)
+        } catch {
+            throw mapNetworkError(error)
+        }
     }
 
     private func sendTaskControl(path: String, on bridgeConnection: BridgeConnection) async throws {
         var request = try makeRequest(baseURL: bridgeConnection.baseURL, path: path)
         request.httpMethod = "POST"
         request.addValue("Bearer \(bridgeConnection.token)", forHTTPHeaderField: "Authorization")
-        let (data, response) = try await session.data(for: request)
-        try validate(response: response, data: data)
+        do {
+            let (data, response) = try await session.data(for: request)
+            try validate(response: response, data: data)
+        } catch {
+            throw mapNetworkError(error)
+        }
     }
 
     private func makeRequest(baseURL: String, path: String) throws -> URLRequest {
@@ -221,15 +286,45 @@ final class ConnectorClient {
 
     private func validate(response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
+            throw ConnectorError.invalidResponse
         }
 
         guard (200..<300).contains(http.statusCode) else {
             if let serverError = try? JSONDecoder().decode(BridgeErrorResponse.self, from: data) {
-                throw ConnectorError.server(message: serverError.error.message)
+                if http.statusCode == 401 || serverError.error.code == "unauthorized" {
+                    throw ConnectorError.unauthorized
+                }
+                if http.statusCode == 410 || serverError.error.code == "pair_session_expired" {
+                    throw ConnectorError.pairSessionExpired
+                }
+                throw ConnectorError.server(code: serverError.error.code, message: serverError.error.message)
             }
-            throw ConnectorError.server(message: "Bridge 返回了错误状态：\(http.statusCode)")
+
+            if http.statusCode == 401 {
+                throw ConnectorError.unauthorized
+            }
+            if http.statusCode == 410 {
+                throw ConnectorError.pairSessionExpired
+            }
+            throw ConnectorError.server(code: "http_\(http.statusCode)", message: "Bridge 返回了错误状态：\(http.statusCode)")
         }
+    }
+
+    private func mapNetworkError(_ error: Error) -> Error {
+        if let connectorError = error as? ConnectorError {
+            return connectorError
+        }
+
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .cannotConnectToHost, .timedOut, .dnsLookupFailed, .resourceUnavailable, .internationalRoamingOff, .callIsActive, .dataNotAllowed:
+                return ConnectorError.bridgeUnavailable
+            default:
+                return urlError
+            }
+        }
+
+        return error
     }
 
     private func mapLobsterStatus(_ raw: String) -> String {
@@ -271,16 +366,6 @@ final class ConnectorClient {
         let hours = minutes / 60
         if hours < 24 { return "\(hours) 小时前" }
         return "\((hours / 24)) 天前"
-    }
-}
-
-enum ConnectorError: LocalizedError {
-    case server(message: String)
-
-    var errorDescription: String? {
-        switch self {
-        case .server(let message): return message
-        }
     }
 }
 
