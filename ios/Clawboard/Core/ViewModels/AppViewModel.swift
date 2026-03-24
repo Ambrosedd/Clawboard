@@ -72,6 +72,7 @@ final class AppViewModel: ObservableObject {
     private var realtimeReconnectTask: Task<Void, Never>?
     private var lastBridgeEventID: String?
     private var realtimeReconnectAttempt = 0
+    private var lastFullRefreshAt: Date?
 
     deinit {
         autoplayTask?.cancel()
@@ -134,6 +135,7 @@ final class AppViewModel: ObservableObject {
 
     func refresh() async {
         loadPhase = .loading
+        lastFullRefreshAt = Date()
         if bridgeConnection != nil {
             bridgeIssue = nil
         }
@@ -692,7 +694,10 @@ final class AppViewModel: ObservableObject {
             guard let self, !Task.isCancelled, self.bridgeConnection != nil else { return }
             self.toastMessage = reason == .bridgeUnavailable ? "正在重连 Bridge 实时同步…" : "正在恢复实时同步…"
             self.startEventStreamIfNeeded()
-            await self.refresh()
+            let shouldRefresh = self.lastFullRefreshAt.map { Date().timeIntervalSince($0) > 2.5 } ?? true
+            if shouldRefresh {
+                await self.refresh()
+            }
         }
     }
 
@@ -729,21 +734,54 @@ final class AppViewModel: ObservableObject {
 
     private func formatRuntimeStatus(_ runtime: RuntimeStatusDiagnostics?) -> String? {
         guard let runtime else { return nil }
-        var parts: [String] = ["Runtime 状态：\(runtime.status)"]
-        if let executionState = runtime.restartExecutionState, !executionState.isEmpty {
-            parts.append("重启执行：\(executionState)")
+
+        func mapRuntimeStatus(_ status: String) -> String {
+            switch status {
+            case "healthy": return "运行正常"
+            case "restart_handled": return "正在处理重启"
+            case "seed": return "演示状态源"
+            case "unknown": return "状态未知"
+            case "invalid": return "状态异常"
+            default: return status
+            }
         }
-        if let result = runtime.restartResult, !result.isEmpty {
+
+        func mapExecutionState(_ state: String?) -> String? {
+            guard let state, !state.isEmpty else { return nil }
+            switch state {
+            case "handled": return "已接收重启请求"
+            case "validated": return "已完成重启后校验"
+            case "seed": return "演示态"
+            case "unknown": return "待确认"
+            case "invalid": return "状态异常"
+            default: return state
+            }
+        }
+
+        func mapResult(_ result: String?) -> String? {
+            guard let result, !result.isEmpty else { return nil }
+            switch result {
+            case "success": return "成功"
+            case "error": return "失败"
+            default: return result
+            }
+        }
+
+        var parts: [String] = ["Runtime：\(mapRuntimeStatus(runtime.status))"]
+        if let executionState = mapExecutionState(runtime.restartExecutionState) {
+            parts.append(executionState)
+        }
+        if let result = mapResult(runtime.restartResult) {
             parts.append("结果：\(result)")
         }
+        if let requestedBy = runtime.lastRestartRequestedBy, !requestedBy.isEmpty {
+            parts.append("请求来源：\(requestedBy)")
+        }
+        if let requestID = runtime.lastRestartRequestID, !requestID.isEmpty {
+            parts.append("请求号：\(requestID)")
+        }
         if let handledAt = runtime.lastRestartHandledAt, !handledAt.isEmpty {
-            parts.append("最近重启处理：\(handledAt)")
-        }
-        if let requestedAt = runtime.lastRestartRequestedAt, !requestedAt.isEmpty {
-            parts.append("最近重启请求：\(requestedAt)")
-        }
-        if let evidence = runtime.restartEvidence, !evidence.isEmpty {
-            parts.append("证据：\(evidence)")
+            parts.append("最近处理：\(handledAt)")
         }
         return parts.joined(separator: " · ")
     }

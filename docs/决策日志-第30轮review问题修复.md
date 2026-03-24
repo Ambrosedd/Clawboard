@@ -70,3 +70,5 @@ App 的 PairingFlowView 重新把：
 - 统一 restart signal schema 的全部生产者/消费者字段
 - 将 runtime 状态文案做用户态映射
 - 进一步去重 SSE reconnect 后的重复 refresh
+
+> 已在后续收尾轮继续推进上述三项。

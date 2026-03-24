@@ -41,6 +41,8 @@ ALERT_LEVEL=""
 RESTART_PENDING=false
 RESTART_REASON=""
 RESTART_REQUESTED_AT=""
+RESTART_REQUEST_ID=""
+RESTART_REQUESTED_BY=""
 RESTART_LAST_HANDLED_AT=""
 RESTART_EXECUTION_STATE="idle"
 RESTART_RESULT=""
@@ -56,12 +58,14 @@ try:
     data=json.loads(p.read_text())
 except Exception:
     data={}
-for key in ['last_restart_requested_at','last_restart_handled_at','restart_execution_state','restart_result','restart_evidence','status']:
+for key in ['last_restart_requested_at','last_restart_request_id','last_restart_requested_by','last_restart_handled_at','restart_execution_state','restart_result','restart_evidence','status']:
     val=data.get(key,'') or ''
     print(f"{key.upper()}={shlex.quote(str(val))}")
 PY
 )"
   RESTART_REQUESTED_AT="${LAST_RESTART_REQUESTED_AT:-}"
+  RESTART_REQUEST_ID="${LAST_RESTART_REQUEST_ID:-}"
+  RESTART_REQUESTED_BY="${LAST_RESTART_REQUESTED_BY:-}"
   RESTART_LAST_HANDLED_AT="${LAST_RESTART_HANDLED_AT:-}"
   RESTART_EXECUTION_STATE="${RESTART_EXECUTION_STATE:-idle}"
   RESTART_RESULT="${RESTART_RESULT:-}"
@@ -121,21 +125,34 @@ fi
 
 if [ -f "${RESTART_SIGNAL_FILE}" ]; then
   RESTART_PENDING=true
-  RESTART_REASON="$(python3 - <<'PY' "${RESTART_SIGNAL_FILE}"
-import json,sys,pathlib
+  eval "$(python3 - <<'PY' "${RESTART_SIGNAL_FILE}"
+import json,sys,pathlib,shlex
 p=pathlib.Path(sys.argv[1])
 try:
     data=json.loads(p.read_text())
-    print(data.get('reason') or 'restart_requested')
 except Exception:
-    print('restart_requested')
+    data={}
+for key, default in [
+    ('reason','restart_requested'),
+    ('request_id',''),
+    ('requested_by',''),
+    ('time','')
+]:
+    value = data.get(key) or default
+    shell_key = {
+        'reason': 'RESTART_REASON',
+        'request_id': 'RESTART_REQUEST_ID',
+        'requested_by': 'RESTART_REQUESTED_BY',
+        'time': 'RESTART_REQUESTED_AT'
+    }[key]
+    print(f"{shell_key}={shlex.quote(str(value))}")
 PY
 )"
-  RESTART_REQUESTED_AT="${NOW}"
+  [ -n "${RESTART_REQUESTED_AT}" ] || RESTART_REQUESTED_AT="${NOW}"
   RESTART_LAST_HANDLED_AT="${NOW}"
   RESTART_EXECUTION_STATE="handled"
   RESTART_RESULT="success"
-  RESTART_EVIDENCE="signal_file_consumed:${RESTART_REASON}"
+  RESTART_EVIDENCE="signal_file_consumed:${RESTART_REASON}:request_id=${RESTART_REQUEST_ID:-unknown}:requested_by=${RESTART_REQUESTED_BY:-unknown}"
   RUNTIME_STATUS="restart_handled"
   LOBSTER_STATUS="restarting"
   TASK_STATUS="running"
@@ -150,6 +167,8 @@ PY
   cat > "${STATUS_FILE}" <<EOF
 {
   "last_restart_requested_at": "${RESTART_REQUESTED_AT}",
+  "last_restart_request_id": "${RESTART_REQUEST_ID}",
+  "last_restart_requested_by": "${RESTART_REQUESTED_BY}",
   "last_restart_handled_at": "${RESTART_LAST_HANDLED_AT}",
   "restart_execution_state": "${RESTART_EXECUTION_STATE}",
   "restart_result": "${RESTART_RESULT}",
@@ -171,10 +190,12 @@ elif [ -n "${RESTART_LAST_HANDLED_AT}" ]; then
   TASK_PROGRESS=91
   TASK_TITLE="Runtime 重启后校验"
   TASK_INPUT="最近一次重启已处理"
-  TASK_OUTPUT="last_restart_handled_at=${RESTART_LAST_HANDLED_AT}; execution_state=${RESTART_EXECUTION_STATE}; evidence=${RESTART_EVIDENCE}"
+  TASK_OUTPUT="last_restart_handled_at=${RESTART_LAST_HANDLED_AT}; request_id=${RESTART_REQUEST_ID:-unknown}; execution_state=${RESTART_EXECUTION_STATE}; evidence=${RESTART_EVIDENCE}"
   cat > "${STATUS_FILE}" <<EOF
 {
   "last_restart_requested_at": "${RESTART_REQUESTED_AT}",
+  "last_restart_request_id": "${RESTART_REQUEST_ID}",
+  "last_restart_requested_by": "${RESTART_REQUESTED_BY}",
   "last_restart_handled_at": "${RESTART_LAST_HANDLED_AT}",
   "restart_execution_state": "${RESTART_EXECUTION_STATE}",
   "restart_result": "${RESTART_RESULT}",
@@ -185,9 +206,9 @@ EOF
 fi
 
 TMP_FILE="${STATE_FILE}.tmp"
-python3 - <<'PY' "${TMP_FILE}" "${NOW}" "${NODE_ID}" "${LEASE_COUNT}" "${LEASE_SCOPE}" "${LEASE_KIND}" "${LEASE_EXPIRES_AT}" "${COMMAND_ALIAS}" "${LOBSTER_STATUS}" "${TASK_STATUS}" "${TASK_STEP}" "${TASK_PROGRESS}" "${TASK_TITLE}" "${TASK_INPUT}" "${TASK_OUTPUT}" "${TASK_ERROR}" "${RISK_LEVEL}" "${RISK_SCORE}" "${ALERT_TITLE}" "${ALERT_SUMMARY}" "${ALERT_LEVEL}" "${RUNTIME_STATUS}" "${RESTART_LAST_HANDLED_AT}" "${RESTART_EXECUTION_STATE}" "${RESTART_RESULT}" "${RESTART_EVIDENCE}"
+python3 - <<'PY' "${TMP_FILE}" "${NOW}" "${NODE_ID}" "${LEASE_COUNT}" "${LEASE_SCOPE}" "${LEASE_KIND}" "${LEASE_EXPIRES_AT}" "${COMMAND_ALIAS}" "${LOBSTER_STATUS}" "${TASK_STATUS}" "${TASK_STEP}" "${TASK_PROGRESS}" "${TASK_TITLE}" "${TASK_INPUT}" "${TASK_OUTPUT}" "${TASK_ERROR}" "${RISK_LEVEL}" "${RISK_SCORE}" "${ALERT_TITLE}" "${ALERT_SUMMARY}" "${ALERT_LEVEL}" "${RUNTIME_STATUS}" "${RESTART_REQUESTED_AT}" "${RESTART_REQUEST_ID}" "${RESTART_REQUESTED_BY}" "${RESTART_LAST_HANDLED_AT}" "${RESTART_EXECUTION_STATE}" "${RESTART_RESULT}" "${RESTART_EVIDENCE}"
 import json, sys
-(out, now, node_id, lease_count, lease_scope, lease_kind, lease_expires_at, command_alias, lobster_status, task_status, task_step, task_progress, task_title, task_input, task_output, task_error, risk_level, risk_score, alert_title, alert_summary, alert_level, runtime_status, restart_last_handled_at, restart_execution_state, restart_result, restart_evidence) = sys.argv[1:]
+(out, now, node_id, lease_count, lease_scope, lease_kind, lease_expires_at, command_alias, lobster_status, task_status, task_step, task_progress, task_title, task_input, task_output, task_error, risk_level, risk_score, alert_title, alert_summary, alert_level, runtime_status, restart_requested_at, restart_request_id, restart_requested_by, restart_last_handled_at, restart_execution_state, restart_result, restart_evidence) = sys.argv[1:]
 lease_count = int(lease_count)
 task_progress = int(task_progress)
 risk_score = int(risk_score)
@@ -196,6 +217,9 @@ recent_logs = [
   f'active_leases={lease_count}',
   (f'lease_kind={lease_kind}' if lease_kind else 'lease_kind=none'),
   (f'granted_scope={lease_scope}' if lease_scope else 'no active granted scope'),
+  (f'last_restart_requested_at={restart_requested_at}' if restart_requested_at else 'no restart requested yet'),
+  (f'last_restart_request_id={restart_request_id}' if restart_request_id else 'restart_request_id=none'),
+  (f'last_restart_requested_by={restart_requested_by}' if restart_requested_by else 'restart_requested_by=unknown'),
   (f'last_restart_handled_at={restart_last_handled_at}' if restart_last_handled_at else 'no restart handled yet'),
   (f'restart_execution_state={restart_execution_state}' if restart_execution_state else 'restart_execution_state=idle'),
   (f'restart_result={restart_result}' if restart_result else 'restart_result=none'),
@@ -207,6 +231,9 @@ state = {
   'generated_at': now,
   'runtime': {
     'status': runtime_status,
+    'last_restart_requested_at': restart_requested_at or None,
+    'last_restart_request_id': restart_request_id or None,
+    'last_restart_requested_by': restart_requested_by or None,
     'last_restart_handled_at': restart_last_handled_at or None,
     'restart_execution_state': restart_execution_state or None,
     'restart_result': restart_result or None,

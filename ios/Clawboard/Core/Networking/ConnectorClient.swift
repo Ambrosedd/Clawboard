@@ -482,6 +482,8 @@ struct RuntimeStatusDiagnostics: Decodable, Equatable {
     let status: String
     let source: String?
     let lastRestartRequestedAt: String?
+    let lastRestartRequestID: String?
+    let lastRestartRequestedBy: String?
     let lastRestartHandledAt: String?
     let restartExecutionState: String?
     let restartResult: String?
@@ -491,6 +493,8 @@ struct RuntimeStatusDiagnostics: Decodable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case status, source, error
         case lastRestartRequestedAt = "last_restart_requested_at"
+        case lastRestartRequestID = "last_restart_request_id"
+        case lastRestartRequestedBy = "last_restart_requested_by"
         case lastRestartHandledAt = "last_restart_handled_at"
         case restartExecutionState = "restart_execution_state"
         case restartResult = "restart_result"
