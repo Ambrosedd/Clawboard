@@ -24,7 +24,7 @@
 
 - 默认种子状态**不会持久化**，服务重启后会重置
 - 暂未直接嵌入真实 Lobster Runtime
-- 鉴权目前仍是本地内存态 token 管理
+- 多设备会话管理仍较轻量
 
 但当前版本已经新增一个更接近真实接入的中间态：
 - 可通过 `STATE_FILE=/path/to/runtime-state.json` 注入外部运行时快照
@@ -37,6 +37,7 @@
 - `POST /pair/exchange`
 - `GET /auth/session`
 - `POST /auth/revoke`
+- `GET /debug/diagnostics`（本地请求免鉴权，用于排障）
 
 ### 基础
 - `GET /health`
@@ -96,6 +97,24 @@ STATE_FILE=./sample-runtime-state.json node src/server.js
 - `/health` 会显示当前 state 校验状态
 
 这样可以把“真实运行态采集”与“对 App 暴露稳定 API / 鉴权 / 配对 / SSE”解耦。
+
+## 诊断能力
+
+当前 bridge 已补充一层更明确的诊断返回：
+
+- `401 unauthorized` 会附带 `diagnostics`
+  - `auth_state`: `missing` / `invalid` / `revoked` / `active`
+  - `pair_session.state`: `active` / `expired`
+  - `bridge.runtime_status`
+- `GET /auth/session` 会返回当前 token 的创建时间、撤销时间、认证状态
+- `GET /device/info` / `GET /capabilities/leases` 会附带 runtime 状态
+- `GET /debug/diagnostics` 可用于本地排障，查看 token 列表摘要、runtime 状态、lease 状态
+
+这能帮助 App 区分：
+- token 失效
+- 配对会话过期
+- bridge 本身不可达
+- runtime 处于何种状态
 
 ### Schema 与 adapter 示例
 

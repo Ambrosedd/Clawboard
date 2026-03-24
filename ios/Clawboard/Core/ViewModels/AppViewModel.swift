@@ -59,6 +59,8 @@ final class AppViewModel: ObservableObject {
     @Published private(set) var supportedCommandAliases: [CommandAliasOption] = []
     @Published private(set) var permissionProfile: String?
     @Published private(set) var bridgeIssue: BridgeConnectionIssue?
+    @Published private(set) var runtimeStatusSummary: String?
+    @Published private(set) var authSessionSummary: String?
 
     private let client = ConnectorClient()
     private let eventStreamClient = BridgeEventStreamClient()
@@ -247,6 +249,8 @@ final class AppViewModel: ObservableObject {
             bridgeConnection = nil
             bridgeConnectionSummary = nil
             bridgeIssue = nil
+            runtimeStatusSummary = nil
+            authSessionSummary = nil
             stopEventStream()
             credentialStore.clear()
             hasLoadedOnce = false
@@ -435,6 +439,8 @@ final class AppViewModel: ObservableObject {
         bridgeConnection = nil
         bridgeConnectionSummary = nil
         bridgeIssue = nil
+        runtimeStatusSummary = nil
+        authSessionSummary = nil
         stopEventStream()
         credentialStore.clear()
         selectedScenario = .normal
@@ -479,11 +485,15 @@ final class AppViewModel: ObservableObject {
     func refreshCapabilityMetadata() async {
         guard let bridgeConnection else { return }
         do {
-            let deviceInfo = try await client.fetchDeviceCapabilities(on: bridgeConnection)
-            let leases = try await client.fetchCapabilityLeases(on: bridgeConnection)
-            permissionProfile = deviceInfo.permissionProfile
-            supportedCommandAliases = deviceInfo.supportedCommandAliases ?? []
-            activeCapabilityLeases = leases.items
+            async let deviceInfo = client.fetchDeviceCapabilities(on: bridgeConnection)
+            async let leases = client.fetchCapabilityLeases(on: bridgeConnection)
+            async let authSession = client.fetchAuthSession(on: bridgeConnection)
+            let (devicePayload, leasePayload, authPayload) = try await (deviceInfo, leases, authSession)
+            permissionProfile = devicePayload.permissionProfile
+            supportedCommandAliases = devicePayload.supportedCommandAliases ?? []
+            activeCapabilityLeases = leasePayload.items
+            runtimeStatusSummary = formatRuntimeStatus(devicePayload.runtimeStatus ?? leasePayload.runtimeStatus ?? authPayload.diagnostics.bridge.runtimeStatus)
+            authSessionSummary = formatAuthSession(authPayload)
         } catch {
             print("Failed to refresh capability metadata: \(error)")
         }
@@ -689,7 +699,10 @@ final class AppViewModel: ObservableObject {
     private func classifyBridgeIssue(from error: Error) -> BridgeConnectionIssue {
         if let connectorError = error as? ConnectorError {
             switch connectorError {
-            case .unauthorized:
+            case .unauthorized(let diagnostics):
+                if diagnostics?.pairSession.state == "expired" {
+                    return .pairSessionExpired
+                }
                 return .unauthorized
             case .pairSessionExpired:
                 return .pairSessionExpired
@@ -712,6 +725,35 @@ final class AppViewModel: ObservableObject {
         }
 
         return .unknown(error.localizedDescription)
+    }
+
+    private func formatRuntimeStatus(_ runtime: RuntimeStatusDiagnostics?) -> String? {
+        guard let runtime else { return nil }
+        var parts: [String] = ["Runtime 状态：\(runtime.status)"]
+        if let handledAt = runtime.lastRestartHandledAt, !handledAt.isEmpty {
+            parts.append("最近重启处理：\(handledAt)")
+        }
+        if let requestedAt = runtime.lastRestartRequestedAt, !requestedAt.isEmpty {
+            parts.append("最近重启请求：\(requestedAt)")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func formatAuthSession(_ response: BridgeAuthSessionResponse) -> String {
+        let authState = response.session.authState ?? response.diagnostics.authState
+        switch authState {
+        case "active":
+            return "当前会话有效"
+        case "revoked":
+            return "当前会话已撤销"
+        case "invalid":
+            return "当前 token 无效"
+        default:
+            if response.diagnostics.pairSession.state == "expired" {
+                return "配对会话已过期"
+            }
+            return "当前会话状态未知"
+        }
     }
 
     private func advanceDemoStateIfNeeded() {

@@ -531,6 +531,53 @@ function getTokenRecord(token) {
   return record;
 }
 
+function getTokenRecordIncludingRevoked(token) {
+  const record = issuedTokens.get(token);
+  return record || null;
+}
+
+function tokenPreview(token) {
+  return token ? `${token.slice(0, 12)}...` : null;
+}
+
+function getAuthDiagnostics(token) {
+  const record = token ? getTokenRecordIncludingRevoked(token) : null;
+  const activePairing = getActivePairingSession();
+
+  let authState = 'missing';
+  if (token) {
+    if (!record) {
+      authState = 'invalid';
+    } else if (record.revoked_at) {
+      authState = 'revoked';
+    } else {
+      authState = 'active';
+    }
+  }
+
+  const pairSessionState = isExpired(activePairing.expires_at) ? 'expired' : 'active';
+  return {
+    auth_state: authState,
+    token_present: Boolean(token),
+    token_preview: tokenPreview(token),
+    token_created_at: record?.created_at || null,
+    token_revoked_at: record?.revoked_at || null,
+    client: record?.client || null,
+    pair_session: {
+      pairing_id: activePairing.pairing_id,
+      state: pairSessionState,
+      expires_at: activePairing.expires_at,
+      bridge_url: activePairing.bridge_url || null
+    },
+    bridge: {
+      state_source: STATE_FILE ? 'state_file' : 'seed',
+      state_status: stateSourceStatus,
+      runtime_status: readRuntimeStatus(),
+      active_leases: currentCapabilityLeases().length
+    }
+  };
+}
+
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
@@ -575,8 +622,50 @@ function notFound(res, entity = 'resource') {
   return sendError(res, 404, 'not_found', `${entity} not found`);
 }
 
-function unauthorized(res) {
-  return sendError(res, 401, 'unauthorized', 'missing or invalid bearer token');
+function readRuntimeStatus() {
+  if (!STATE_FILE) {
+    return {
+      status: 'seed',
+      source: null,
+      last_restart_requested_at: null,
+      last_restart_handled_at: null
+    };
+  }
+
+  const statusFile = path.join(path.dirname(path.resolve(STATE_FILE)), 'runtime-status.json');
+  if (!fs.existsSync(statusFile)) {
+    return {
+      status: 'unknown',
+      source: statusFile,
+      last_restart_requested_at: null,
+      last_restart_handled_at: null
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(statusFile, 'utf8'));
+    return {
+      status: parsed.status || 'unknown',
+      source: statusFile,
+      last_restart_requested_at: parsed.last_restart_requested_at || null,
+      last_restart_handled_at: parsed.last_restart_handled_at || null
+    };
+  } catch (error) {
+    return {
+      status: 'invalid',
+      source: statusFile,
+      last_restart_requested_at: null,
+      last_restart_handled_at: null,
+      error: error.message
+    };
+  }
+}
+
+function unauthorized(res, diagnostics = null) {
+  return sendJson(res, 401, {
+    error: { code: 'unauthorized', message: 'missing or invalid bearer token' },
+    diagnostics
+  });
 }
 
 function invalidRequest(res, message, code = 'invalid_request') {
@@ -634,7 +723,7 @@ function ensureAuth(req, res) {
   if (req.url.startsWith('/debug/') && isLocalRequest(req)) return true;
   const token = extractBearerToken(req);
   if (token && getTokenRecord(token)) return true;
-  unauthorized(res);
+  unauthorized(res, getAuthDiagnostics(token));
   return false;
 }
 
@@ -942,13 +1031,15 @@ async function handler(req, res) {
         .map(([key]) => key),
       supported_command_aliases: Object.entries(commandAliases).map(([id, item]) => ({ id, ...item })),
       directory_policy: permissionProfile.directory_policy || null,
-      active_capability_leases: currentCapabilityLeases()
+      active_capability_leases: currentCapabilityLeases(),
+      runtime_status: readRuntimeStatus()
     });
   }
 
   if (req.method === 'GET' && pathname === '/auth/session') {
     const token = extractBearerToken(req);
-    const record = getTokenRecord(token);
+    const diagnostics = getAuthDiagnostics(token);
+    const record = getTokenRecordIncludingRevoked(token);
     return sendJson(res, 200, {
       node: {
         id: deviceInfo.id,
@@ -956,10 +1047,13 @@ async function handler(req, res) {
         platform: deviceInfo.platform
       },
       session: {
-        token_preview: token ? `${token.slice(0, 12)}...` : null,
+        token_preview: diagnostics.token_preview,
         created_at: record?.created_at || null,
+        revoked_at: record?.revoked_at || null,
+        auth_state: diagnostics.auth_state,
         client: record?.client || null
-      }
+      },
+      diagnostics
     });
   }
 
@@ -969,12 +1063,13 @@ async function handler(req, res) {
     if (revoked) {
       publishEvent('auth.revoked', {
         node_id: deviceInfo.id,
-        token_preview: token ? `${token.slice(0, 12)}...` : null
+        token_preview: tokenPreview(token)
       });
     }
     return sendJson(res, 200, {
       ok: revoked,
-      revoked_at: revoked ? isoNow() : null
+      revoked_at: revoked ? isoNow() : null,
+      diagnostics: getAuthDiagnostics(token)
     });
   }
 
@@ -1276,7 +1371,27 @@ async function handler(req, res) {
   }
 
   if (req.method === 'GET' && pathname === '/capabilities/leases') {
-    return sendJson(res, 200, { items: currentCapabilityLeases() });
+    return sendJson(res, 200, {
+      items: currentCapabilityLeases(),
+      runtime_status: readRuntimeStatus()
+    });
+  }
+
+  if (req.method === 'GET' && pathname === '/debug/diagnostics') {
+    const token = extractBearerToken(req);
+    return sendJson(res, 200, {
+      node: deviceInfo,
+      diagnostics: getAuthDiagnostics(token),
+      tokens: Array.from(issuedTokens.values()).map(item => ({
+        token_preview: tokenPreview(item.token),
+        created_at: item.created_at || null,
+        revoked_at: item.revoked_at || null,
+        client: item.client || null
+      })),
+      runtime_status: readRuntimeStatus(),
+      state_status: stateSourceStatus,
+      active_capability_leases: currentCapabilityLeases()
+    });
   }
 
   params = matchRoute(pathname, '/lobsters/:id/restart');

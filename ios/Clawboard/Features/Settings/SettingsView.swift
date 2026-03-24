@@ -33,6 +33,18 @@ struct SettingsView: View {
                                     .font(.caption)
                                     .foregroundStyle(issue == .unauthorized || issue == .pairSessionExpired ? AppTheme.danger : AppTheme.warning)
                             }
+
+                            if let authSessionSummary = viewModel.authSessionSummary {
+                                Text(authSessionSummary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            if let runtimeStatusSummary = viewModel.runtimeStatusSummary {
+                                Text(runtimeStatusSummary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
 
                         Button("断开 Bridge 连接") {

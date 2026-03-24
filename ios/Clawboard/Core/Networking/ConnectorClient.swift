@@ -1,7 +1,7 @@
 import Foundation
 
 enum ConnectorError: LocalizedError, Equatable {
-    case unauthorized
+    case unauthorized(AuthDiagnostics?)
     case pairSessionExpired
     case bridgeUnavailable
     case invalidResponse
@@ -9,7 +9,13 @@ enum ConnectorError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .unauthorized:
+        case .unauthorized(let diagnostics):
+            if diagnostics?.pairSession.state == "expired" {
+                return "当前会话已失效，且配对会话已过期，请重新获取连接信息"
+            }
+            if diagnostics?.authState == "revoked" {
+                return "当前 token 已被撤销，请重新连接 Bridge"
+            }
             return "当前会话已失效，请重新连接 Bridge"
         case .pairSessionExpired:
             return "配对会话已过期，请重新获取配对信息"
@@ -24,7 +30,13 @@ enum ConnectorError: LocalizedError, Equatable {
 
     var userFacingMessage: String {
         switch self {
-        case .unauthorized:
+        case .unauthorized(let diagnostics):
+            if diagnostics?.pairSession.state == "expired" {
+                return "配对已过期，请重新获取连接串"
+            }
+            if diagnostics?.authState == "revoked" {
+                return "当前会话已被撤销，请重新连接"
+            }
             return "当前会话已失效，请重新连接"
         case .pairSessionExpired:
             return "配对已过期，请重新获取连接串"
@@ -136,6 +148,10 @@ final class ConnectorClient {
 
     func fetchCapabilityLeases(on bridgeConnection: BridgeConnection) async throws -> CapabilityLeaseListResponse {
         try await fetchAuthorized(bridgeConnection, path: "/capabilities/leases")
+    }
+
+    func fetchAuthSession(on bridgeConnection: BridgeConnection) async throws -> BridgeAuthSessionResponse {
+        try await fetchAuthorized(bridgeConnection, path: "/auth/session")
     }
 
     func reject(_ approval: ApprovalItem, on bridgeConnection: BridgeConnection, reason: String = "rejected_by_operator") async throws {
@@ -292,7 +308,7 @@ final class ConnectorClient {
         guard (200..<300).contains(http.statusCode) else {
             if let serverError = try? JSONDecoder().decode(BridgeErrorResponse.self, from: data) {
                 if http.statusCode == 401 || serverError.error.code == "unauthorized" {
-                    throw ConnectorError.unauthorized
+                    throw ConnectorError.unauthorized(serverError.diagnostics)
                 }
                 if http.statusCode == 410 || serverError.error.code == "pair_session_expired" {
                     throw ConnectorError.pairSessionExpired
@@ -301,7 +317,7 @@ final class ConnectorClient {
             }
 
             if http.statusCode == 401 {
-                throw ConnectorError.unauthorized
+                throw ConnectorError.unauthorized(nil)
             }
             if http.statusCode == 410 {
                 throw ConnectorError.pairSessionExpired
@@ -376,6 +392,7 @@ private struct BridgeErrorResponse: Decodable {
     }
 
     let error: ErrorBody
+    let diagnostics: AuthDiagnostics?
 }
 
 private struct LobsterListResponse: Decodable {
@@ -461,6 +478,102 @@ private struct BridgeAlertSummary: Decodable {
     }
 }
 
+struct RuntimeStatusDiagnostics: Decodable, Equatable {
+    let status: String
+    let source: String?
+    let lastRestartRequestedAt: String?
+    let lastRestartHandledAt: String?
+    let error: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case status, source, error
+        case lastRestartRequestedAt = "last_restart_requested_at"
+        case lastRestartHandledAt = "last_restart_handled_at"
+    }
+}
+
+struct AuthDiagnostics: Decodable, Equatable {
+    struct PairSession: Decodable, Equatable {
+        let pairingID: String?
+        let state: String
+        let expiresAt: String?
+        let bridgeURL: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case state
+            case pairingID = "pairing_id"
+            case expiresAt = "expires_at"
+            case bridgeURL = "bridge_url"
+        }
+    }
+
+    struct BridgeDiagnostics: Decodable, Equatable {
+        let stateSource: String?
+        let activeLeases: Int?
+        let runtimeStatus: RuntimeStatusDiagnostics?
+
+        private enum CodingKeys: String, CodingKey {
+            case stateSource = "state_source"
+            case activeLeases = "active_leases"
+            case runtimeStatus = "runtime_status"
+        }
+    }
+
+    let authState: String
+    let tokenPresent: Bool?
+    let tokenPreview: String?
+    let tokenCreatedAt: String?
+    let tokenRevokedAt: String?
+    let client: BridgeNodeClientInfo?
+    let pairSession: PairSession
+    let bridge: BridgeDiagnostics
+
+    private enum CodingKeys: String, CodingKey {
+        case authState = "auth_state"
+        case tokenPresent = "token_present"
+        case tokenPreview = "token_preview"
+        case tokenCreatedAt = "token_created_at"
+        case tokenRevokedAt = "token_revoked_at"
+        case client
+        case pairSession = "pair_session"
+        case bridge
+    }
+}
+
+struct BridgeNodeClientInfo: Decodable, Equatable {
+    let deviceName: String?
+    let clientName: String?
+    let clientVersion: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case deviceName = "device_name"
+        case clientName = "client_name"
+        case clientVersion = "client_version"
+    }
+}
+
+struct BridgeAuthSessionResponse: Decodable {
+    struct Session: Decodable {
+        let tokenPreview: String?
+        let createdAt: String?
+        let revokedAt: String?
+        let authState: String?
+        let client: BridgeNodeClientInfo?
+
+        private enum CodingKeys: String, CodingKey {
+            case tokenPreview = "token_preview"
+            case createdAt = "created_at"
+            case revokedAt = "revoked_at"
+            case authState = "auth_state"
+            case client
+        }
+    }
+
+    let node: BridgeNodeInfo
+    let session: Session
+    let diagnostics: AuthDiagnostics
+}
+
 struct BridgeDeviceInfo: Decodable {
     let id: String
     let name: String
@@ -469,6 +582,7 @@ struct BridgeDeviceInfo: Decodable {
     let supportedCapabilityKinds: [String]?
     let supportedCommandAliases: [CommandAliasOption]?
     let activeCapabilityLeases: [CapabilityLease]?
+    let runtimeStatus: RuntimeStatusDiagnostics?
 
     private enum CodingKeys: String, CodingKey {
         case id, name, platform
@@ -476,11 +590,18 @@ struct BridgeDeviceInfo: Decodable {
         case supportedCapabilityKinds = "supported_capability_kinds"
         case supportedCommandAliases = "supported_command_aliases"
         case activeCapabilityLeases = "active_capability_leases"
+        case runtimeStatus = "runtime_status"
     }
 }
 
 struct CapabilityLeaseListResponse: Decodable {
     let items: [CapabilityLease]
+    let runtimeStatus: RuntimeStatusDiagnostics?
+
+    private enum CodingKeys: String, CodingKey {
+        case items
+        case runtimeStatus = "runtime_status"
+    }
 }
 
 private struct BridgeApproveRequest: Encodable {
