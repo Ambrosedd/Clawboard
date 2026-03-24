@@ -730,11 +730,20 @@ final class AppViewModel: ObservableObject {
     private func formatRuntimeStatus(_ runtime: RuntimeStatusDiagnostics?) -> String? {
         guard let runtime else { return nil }
         var parts: [String] = ["Runtime 状态：\(runtime.status)"]
+        if let executionState = runtime.restartExecutionState, !executionState.isEmpty {
+            parts.append("重启执行：\(executionState)")
+        }
+        if let result = runtime.restartResult, !result.isEmpty {
+            parts.append("结果：\(result)")
+        }
         if let handledAt = runtime.lastRestartHandledAt, !handledAt.isEmpty {
             parts.append("最近重启处理：\(handledAt)")
         }
         if let requestedAt = runtime.lastRestartRequestedAt, !requestedAt.isEmpty {
             parts.append("最近重启请求：\(requestedAt)")
+        }
+        if let evidence = runtime.restartEvidence, !evidence.isEmpty {
+            parts.append("证据：\(evidence)")
         }
         return parts.joined(separator: " · ")
     }

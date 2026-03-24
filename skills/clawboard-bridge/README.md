@@ -15,7 +15,7 @@
 - `scripts/stop-cloudflare-tunnel.sh` — 停止 Cloudflare Tunnel
 - `scripts/status-cloudflare-tunnel.sh` — 查看 Tunnel 状态
 - `scripts/show-connection.sh` — 查看可发给手机的连接串（优先 HTTPS）
-- `scripts/restart-lobster.sh` — 手动写入受限重启请求
+- `scripts/restart-lobster.sh` — 手动写入受限重启请求（会打印 request_id）
 
 ## 目录约定
 
@@ -25,8 +25,8 @@
 - `runtime/runtime-state.json` — runtime adapter 输出的真实状态快照
 - `runtime/auth-tokens.json` — 已签发 token 的持久化文件
 - `runtime/capability-leases.json` — 当前生效中的临时授权租约
-- `runtime/restart-requested.flag` — 受限重启请求标记
-- `runtime/runtime-status.json` — runtime adapter 处理状态
+- `runtime/restart-requested.flag` — 受限重启请求标记（含 request_id / requested_by）
+- `runtime/runtime-status.json` — runtime adapter 处理状态与重启执行证据摘要
 - `logs/` — 运行日志
 - `run/` — PID 等运行状态
 

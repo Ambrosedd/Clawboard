@@ -42,6 +42,9 @@ RESTART_PENDING=false
 RESTART_REASON=""
 RESTART_REQUESTED_AT=""
 RESTART_LAST_HANDLED_AT=""
+RESTART_EXECUTION_STATE="idle"
+RESTART_RESULT=""
+RESTART_EVIDENCE=""
 RUNTIME_STATUS="healthy"
 COMMAND_ALIAS=""
 
@@ -53,13 +56,16 @@ try:
     data=json.loads(p.read_text())
 except Exception:
     data={}
-for key in ['last_restart_requested_at','last_restart_handled_at','status']:
+for key in ['last_restart_requested_at','last_restart_handled_at','restart_execution_state','restart_result','restart_evidence','status']:
     val=data.get(key,'') or ''
     print(f"{key.upper()}={shlex.quote(str(val))}")
 PY
 )"
   RESTART_REQUESTED_AT="${LAST_RESTART_REQUESTED_AT:-}"
   RESTART_LAST_HANDLED_AT="${LAST_RESTART_HANDLED_AT:-}"
+  RESTART_EXECUTION_STATE="${RESTART_EXECUTION_STATE:-idle}"
+  RESTART_RESULT="${RESTART_RESULT:-}"
+  RESTART_EVIDENCE="${RESTART_EVIDENCE:-}"
   RUNTIME_STATUS="${STATUS:-healthy}"
 fi
 
@@ -127,6 +133,9 @@ PY
 )"
   RESTART_REQUESTED_AT="${NOW}"
   RESTART_LAST_HANDLED_AT="${NOW}"
+  RESTART_EXECUTION_STATE="handled"
+  RESTART_RESULT="success"
+  RESTART_EVIDENCE="signal_file_consumed:${RESTART_REASON}"
   RUNTIME_STATUS="restart_handled"
   LOBSTER_STATUS="restarting"
   TASK_STATUS="running"
@@ -134,7 +143,7 @@ PY
   TASK_PROGRESS=83
   TASK_TITLE="Runtime 重启处理中"
   TASK_INPUT="runtime adapter 检测到 restart signal"
-  TASK_OUTPUT="重启请求已接收并标记处理"
+  TASK_OUTPUT="重启请求已接收，evidence=${RESTART_EVIDENCE}"
   ALERT_TITLE="龙虾正在重启"
   ALERT_SUMMARY="runtime adapter 已处理重启请求：${RESTART_REASON}"
   ALERT_LEVEL="P2"
@@ -142,11 +151,19 @@ PY
 {
   "last_restart_requested_at": "${RESTART_REQUESTED_AT}",
   "last_restart_handled_at": "${RESTART_LAST_HANDLED_AT}",
+  "restart_execution_state": "${RESTART_EXECUTION_STATE}",
+  "restart_result": "${RESTART_RESULT}",
+  "restart_evidence": "${RESTART_EVIDENCE}",
   "status": "${RUNTIME_STATUS}"
 }
 EOF
   rm -f "${RESTART_SIGNAL_FILE}"
 elif [ -n "${RESTART_LAST_HANDLED_AT}" ]; then
+  RESTART_EXECUTION_STATE="validated"
+  RESTART_RESULT="success"
+  if [ -z "${RESTART_EVIDENCE}" ]; then
+    RESTART_EVIDENCE="post_restart_validation:${RESTART_LAST_HANDLED_AT}"
+  fi
   RUNTIME_STATUS="healthy"
   LOBSTER_STATUS="running"
   TASK_STATUS="running"
@@ -154,20 +171,23 @@ elif [ -n "${RESTART_LAST_HANDLED_AT}" ]; then
   TASK_PROGRESS=91
   TASK_TITLE="Runtime 重启后校验"
   TASK_INPUT="最近一次重启已处理"
-  TASK_OUTPUT="last_restart_handled_at=${RESTART_LAST_HANDLED_AT}"
+  TASK_OUTPUT="last_restart_handled_at=${RESTART_LAST_HANDLED_AT}; execution_state=${RESTART_EXECUTION_STATE}; evidence=${RESTART_EVIDENCE}"
   cat > "${STATUS_FILE}" <<EOF
 {
   "last_restart_requested_at": "${RESTART_REQUESTED_AT}",
   "last_restart_handled_at": "${RESTART_LAST_HANDLED_AT}",
+  "restart_execution_state": "${RESTART_EXECUTION_STATE}",
+  "restart_result": "${RESTART_RESULT}",
+  "restart_evidence": "${RESTART_EVIDENCE}",
   "status": "healthy"
 }
 EOF
 fi
 
 TMP_FILE="${STATE_FILE}.tmp"
-python3 - <<'PY' "${TMP_FILE}" "${NOW}" "${NODE_ID}" "${LEASE_COUNT}" "${LEASE_SCOPE}" "${LEASE_KIND}" "${LEASE_EXPIRES_AT}" "${COMMAND_ALIAS}" "${LOBSTER_STATUS}" "${TASK_STATUS}" "${TASK_STEP}" "${TASK_PROGRESS}" "${TASK_TITLE}" "${TASK_INPUT}" "${TASK_OUTPUT}" "${TASK_ERROR}" "${RISK_LEVEL}" "${RISK_SCORE}" "${ALERT_TITLE}" "${ALERT_SUMMARY}" "${ALERT_LEVEL}" "${RUNTIME_STATUS}" "${RESTART_LAST_HANDLED_AT}"
+python3 - <<'PY' "${TMP_FILE}" "${NOW}" "${NODE_ID}" "${LEASE_COUNT}" "${LEASE_SCOPE}" "${LEASE_KIND}" "${LEASE_EXPIRES_AT}" "${COMMAND_ALIAS}" "${LOBSTER_STATUS}" "${TASK_STATUS}" "${TASK_STEP}" "${TASK_PROGRESS}" "${TASK_TITLE}" "${TASK_INPUT}" "${TASK_OUTPUT}" "${TASK_ERROR}" "${RISK_LEVEL}" "${RISK_SCORE}" "${ALERT_TITLE}" "${ALERT_SUMMARY}" "${ALERT_LEVEL}" "${RUNTIME_STATUS}" "${RESTART_LAST_HANDLED_AT}" "${RESTART_EXECUTION_STATE}" "${RESTART_RESULT}" "${RESTART_EVIDENCE}"
 import json, sys
-(out, now, node_id, lease_count, lease_scope, lease_kind, lease_expires_at, command_alias, lobster_status, task_status, task_step, task_progress, task_title, task_input, task_output, task_error, risk_level, risk_score, alert_title, alert_summary, alert_level, runtime_status, restart_last_handled_at) = sys.argv[1:]
+(out, now, node_id, lease_count, lease_scope, lease_kind, lease_expires_at, command_alias, lobster_status, task_status, task_step, task_progress, task_title, task_input, task_output, task_error, risk_level, risk_score, alert_title, alert_summary, alert_level, runtime_status, restart_last_handled_at, restart_execution_state, restart_result, restart_evidence) = sys.argv[1:]
 lease_count = int(lease_count)
 task_progress = int(task_progress)
 risk_score = int(risk_score)
@@ -177,11 +197,21 @@ recent_logs = [
   (f'lease_kind={lease_kind}' if lease_kind else 'lease_kind=none'),
   (f'granted_scope={lease_scope}' if lease_scope else 'no active granted scope'),
   (f'last_restart_handled_at={restart_last_handled_at}' if restart_last_handled_at else 'no restart handled yet'),
+  (f'restart_execution_state={restart_execution_state}' if restart_execution_state else 'restart_execution_state=idle'),
+  (f'restart_result={restart_result}' if restart_result else 'restart_result=none'),
+  (f'restart_evidence={restart_evidence}' if restart_evidence else 'restart_evidence=none'),
   f'runtime_status={runtime_status}'
 ]
 state = {
   'schema_version': 'clawboard.bridge.state.v1',
   'generated_at': now,
+  'runtime': {
+    'status': runtime_status,
+    'last_restart_handled_at': restart_last_handled_at or None,
+    'restart_execution_state': restart_execution_state or None,
+    'restart_result': restart_result or None,
+    'restart_evidence': restart_evidence or None,
+  },
   'lobsters': [
     {
       'id': 'lobster-runtime-1',

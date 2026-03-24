@@ -628,7 +628,10 @@ function readRuntimeStatus() {
       status: 'seed',
       source: null,
       last_restart_requested_at: null,
-      last_restart_handled_at: null
+      last_restart_handled_at: null,
+      restart_execution_state: 'seed',
+      restart_result: null,
+      restart_evidence: null
     };
   }
 
@@ -638,7 +641,10 @@ function readRuntimeStatus() {
       status: 'unknown',
       source: statusFile,
       last_restart_requested_at: null,
-      last_restart_handled_at: null
+      last_restart_handled_at: null,
+      restart_execution_state: 'unknown',
+      restart_result: null,
+      restart_evidence: null
     };
   }
 
@@ -648,7 +654,10 @@ function readRuntimeStatus() {
       status: parsed.status || 'unknown',
       source: statusFile,
       last_restart_requested_at: parsed.last_restart_requested_at || null,
-      last_restart_handled_at: parsed.last_restart_handled_at || null
+      last_restart_handled_at: parsed.last_restart_handled_at || null,
+      restart_execution_state: parsed.restart_execution_state || null,
+      restart_result: parsed.restart_result || null,
+      restart_evidence: parsed.restart_evidence || null
     };
   } catch (error) {
     return {
@@ -656,6 +665,9 @@ function readRuntimeStatus() {
       source: statusFile,
       last_restart_requested_at: null,
       last_restart_handled_at: null,
+      restart_execution_state: 'invalid',
+      restart_result: 'error',
+      restart_evidence: null,
       error: error.message
     };
   }
