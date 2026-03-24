@@ -146,6 +146,9 @@ if (API_TOKEN) {
 let state = createSeedState(deviceInfo.id);
 let stateFileWatcher = null;
 let stateReloadTimer = null;
+let supervisorAckWatcher = null;
+let supervisorAckReloadTimer = null;
+let lastSupervisorAckSignature = null;
 let stateSourceStatus = {
   mode: STATE_FILE ? 'state_file' : 'seed',
   valid: true,
@@ -511,6 +514,78 @@ function startStateFileWatcher(filePath) {
         markStateInvalid(resolvedPath, error);
       }
     }, 150);
+  });
+}
+
+function publishSupervisorAckEvent(runtimeStatus, reason = 'ack_file_changed') {
+  const ack = runtimeStatus?.supervisor_ack;
+  if (!ack) return;
+
+  const signature = JSON.stringify({
+    status: ack.status || null,
+    request_id: ack.request_id || null,
+    result: ack.result || null,
+    evidence: ack.evidence || null,
+    updated_at: ack.updated_at || null
+  });
+  if (signature === lastSupervisorAckSignature) {
+    return;
+  }
+  lastSupervisorAckSignature = signature;
+
+  const lobsterId = ack.request_id
+    ? (state.lobsters.find(item => item.recent_logs.some(log => typeof log === 'string' && log.includes(ack.request_id)))?.id || null)
+    : null;
+  const taskId = ack.request_id
+    ? (state.tasks.find(item => item.output_summary === ack.request_id || item.timeline.some(step => JSON.stringify(step).includes(ack.request_id)))?.id || null)
+    : null;
+
+  publishEvent('runtime.restart.ack.updated', {
+    source: ack.source || null,
+    reason,
+    status: ack.status || null,
+    target: ack.target || null,
+    request_id: ack.request_id || null,
+    requested_at: ack.requested_at || null,
+    requested_by: ack.requested_by || null,
+    result: ack.result || null,
+    evidence: ack.evidence || null,
+    updated_at: ack.updated_at || null,
+    restart_execution_state: runtimeStatus.restart_execution_state || null,
+    restart_result: runtimeStatus.restart_result || null,
+    lobster_id: lobsterId,
+    task_id: taskId
+  });
+}
+
+function startSupervisorAckWatcher() {
+  const action = permissionProfile.restart_action;
+  if (!action || action.type !== 'supervisor_hint' || !action.ack_file) {
+    return;
+  }
+
+  const ackPath = path.isAbsolute(action.ack_file) ? action.ack_file : path.resolve(process.cwd(), action.ack_file);
+  fs.mkdirSync(path.dirname(ackPath), { recursive: true });
+
+  const emitCurrent = reason => {
+    try {
+      const runtimeStatus = readRuntimeStatus();
+      publishSupervisorAckEvent(runtimeStatus, reason);
+    } catch (error) {
+      publishEvent('runtime.restart.ack.invalid', {
+        source: ackPath,
+        reason,
+        message: error.message || String(error)
+      });
+    }
+  };
+
+  emitCurrent('watcher_started');
+
+  supervisorAckWatcher = fs.watch(path.dirname(ackPath), { persistent: false }, (_eventType, filename) => {
+    if (filename && filename !== path.basename(ackPath)) return;
+    clearTimeout(supervisorAckReloadTimer);
+    supervisorAckReloadTimer = setTimeout(() => emitCurrent('ack_file_changed'), 150);
   });
 }
 
@@ -1679,6 +1754,7 @@ server.listen(PORT, HOST, () => {
   if (STATE_FILE) {
     startStateFileWatcher(STATE_FILE);
   }
+  startSupervisorAckWatcher();
   console.log(`Clawboard Bridge listening on http://${HOST}:${PORT}`);
   const activePairing = getActivePairingSession();
   console.log(`Pair code: ${activePairing.pair_code} (expires at ${activePairing.expires_at})`);
