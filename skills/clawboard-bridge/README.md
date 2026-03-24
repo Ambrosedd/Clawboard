@@ -16,6 +16,8 @@
 - `scripts/status-cloudflare-tunnel.sh` — 查看 Tunnel 状态
 - `scripts/show-connection.sh` — 查看可发给手机的连接串（优先 HTTPS）
 - `scripts/restart-lobster.sh` — 手动写入受限重启请求（会打印 request_id）
+- `scripts/mock-supervisor-ack.sh` — 本地模拟 supervisor/container runtime 回填 ack/result
+- `scripts/show-restart-acks.sh` — 查看当前 restart ack 文件内容
 
 ## 目录约定
 
@@ -64,3 +66,23 @@ bash scripts/show-connection.sh
 注意：
 - `supervisor_hint` 仍然不是 bridge 直接执行宿主命令；它只负责声明、请求落点、结果回填
 - bridge 仍然遵守窄边界，不提供任意 shell / 任意远程管理能力
+
+## 本地演示 supervisor ack 闭环
+
+如果你想本地演示 `container` / `supervised` 的 restart ack 状态链，可以这样做：
+
+```bash
+cd ~/.clawboard/skills/clawboard-bridge
+bash scripts/show-restart-acks.sh
+bash scripts/mock-supervisor-ack.sh supervised acknowledged
+bash scripts/mock-supervisor-ack.sh supervised completed success
+bash scripts/show-restart-acks.sh
+```
+
+如果要模拟失败：
+
+```bash
+bash scripts/mock-supervisor-ack.sh supervised failed error
+```
+
+container profile 也一样，把第一个参数换成 `container` 即可。
